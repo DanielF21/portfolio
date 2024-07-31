@@ -102,6 +102,7 @@ export const DATA = {
     },
   ],
     projects: [
+      /*
       {
         title: "Automatic Chat",
         href: "https://automatic.chat",
@@ -131,7 +132,9 @@ export const DATA = {
         video:
           "https://pub-83c5db439b40468498f97946200806f7.r2.dev/automatic-chat.mp4",
       },
+      */
     ],
+
   hackathons: [
   
   
