@@ -220,6 +220,7 @@ export default function Page() {
                 <Link
                   href={DATA.contact.social.X.url}
                   className="text-blue-500 hover:underline"
+                  target="_blank"
                 >
                   with a direct question on twitter
                 </Link>{" "}
