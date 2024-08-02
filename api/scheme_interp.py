@@ -10,7 +10,6 @@ def repl(raise_all=False):
     files = sys.argv[1:]
     for f in files:
         evaluate_file(f, global_frame)
-
     while True:
         # read the input.  pressing ctrl+d exits, as does typing "EXIT" at the
         # prompt.  pressing ctrl+c moves on to the next prompt, ignoring
@@ -776,7 +775,5 @@ def evaluate(tree, frame = None):
             args.append(evaluate(tree[arg], frame))
         return func(args)
 
-
 if __name__ == "__main__":
     repl()
-
