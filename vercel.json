@@ -1,0 +1,26 @@
+{
+    "buildCommand": "pnpm run build",
+    "outputDirectory": ".next",
+    "installCommand": "pnpm install",
+    "builds": [
+      {
+        "src": "api/main.py",
+        "use": "@vercel/python"
+      },
+      {
+        "src": "package.json",
+        "use": "@vercel/next"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/api/(.*)",
+        "dest": "api/main.py"
+      },
+      {
+        "src": "/(.*)",
+        "dest": "/"
+      }
+    ]
+  }
+  

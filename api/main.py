@@ -1,3 +1,4 @@
+import os
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Set up CORS
+# CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],  # In production, this will be the same as the frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

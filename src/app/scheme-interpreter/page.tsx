@@ -23,16 +23,13 @@ export default function SchemeInterpreter() {
     }, [history, currentInput]);
 
     const handleKeyDown = async (e: React.KeyboardEvent<HTMLSpanElement>) => {
-
-       const isDev = process.env.NODE_ENV === "development"
-
-       const URL = isDev ? "http://localhost:8000" : "https://127.0.0.1:8000"
+        const apiUrl = '/api';  // This will work both locally and in production
 
         if (e.key === 'Enter') {
             e.preventDefault();
             if (currentInput.trim()) {
                 try {
-                    const response = await fetch(`${URL}/scheme-interpreter`, {
+                    const response = await fetch(`${apiUrl}/scheme-interpreter`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
