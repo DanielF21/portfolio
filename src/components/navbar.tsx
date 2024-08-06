@@ -26,7 +26,6 @@ export default function Navbar() {
                     buttonVariants({ variant: "ghost", size: "icon" }),
                     "size-12"
                   )}
-                  target="_blank"
                 >
                   <item.icon className="size-4" />
                 </Link>
@@ -50,7 +49,6 @@ export default function Navbar() {
                       buttonVariants({ variant: "ghost", size: "icon" }),
                       "size-12"
                     )}
-                    target="_blank"
                   >
                     <social.icon className="size-4" />
                   </Link>

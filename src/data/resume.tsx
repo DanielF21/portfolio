@@ -10,7 +10,7 @@ export const DATA = {
   description:
     "Tech enthusiast and MIT graduate focused on impactful solutions.",
   summary:
-    "In 2024, I graduated from MIT with a BS in Computer Science and Engineering. I have contributed to research projects at MIT's Sports Lab and Digital Humanities Lab. I am driven by the challenge of developing innovative solutions using machine learning and data science.",
+    "In 2024, I graduated from MIT with a BS in Computer Science and Engineering. I've contributed to research projects at MIT's Sports Lab and Digital Humanities Lab, and I'm passionate about building innovative solutions using machine learning and data science.",
   avatarUrl: "/me.png",
   skills: [
     "React",
