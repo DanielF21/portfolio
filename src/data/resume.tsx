@@ -102,37 +102,32 @@ export const DATA = {
     },
   ],
     projects: [
-      /*
       {
-        title: "Automatic Chat",
-        href: "https://automatic.chat",
-        dates: "April 2023 - March 2024",
+        title: "Scheme Interpreter",
+        href: "danielfleming.xyz/scheme-interpreter",
+        dates: "November 2022 - December 202",
         active: true,
         description:
-          "Developed an AI Customer Support Chatbot which automatically responds to customer support tickets using the latest GPT models.",
+          "Developed a Python based Scheme Language Interpreter.",
         technologies: [
           "Next.js",
           "Typescript",
-          "PostgreSQL",
-          "Prisma",
+          "Python",
           "TailwindCSS",
           "Shadcn UI",
           "Magic UI",
-          "Stripe",
-          "Cloudflare Workers",
         ],
         links: [
           {
             type: "Website",
-            href: "https://automatic.chat",
+            href: "danielfleming.xyz/scheme-interpreter",
             icon: <Icons.globe className="size-3" />,
           },
         ],
-        image: "",
+        image: {src: "/scheme.png", width: 400, height: 200},
         video:
-          "https://pub-83c5db439b40468498f97946200806f7.r2.dev/automatic-chat.mp4",
+          "",
       },
-      */ 
     ],
 
   hackathons: [

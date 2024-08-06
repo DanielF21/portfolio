@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import Image from "next/image";
+import Image, { StaticImageData } from "next/image";
 import Link from "next/link";
 import Markdown from "react-markdown";
 
@@ -18,7 +18,7 @@ interface Props {
   dates: string;
   tags: readonly string[];
   link?: string;
-  image?: string;
+  image?: string | { src: string; width: number; height: number };
   video?: string;
   links?: readonly {
     icon: React.ReactNode;

@@ -113,7 +113,7 @@ export default function Page() {
           </div>
         </div>
       </section>
-      {/*
+      {
       <section id="projects">
         
         <div className="space-y-12 w-full py-12">
@@ -156,7 +156,7 @@ export default function Page() {
           </div>
         </div>
       </section>
-      */}
+      }
       {/*
       <section id="hackathons">
         <div className="space-y-12 w-full py-12">
