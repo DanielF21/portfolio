@@ -2,6 +2,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 
+// API URL - your Render API URL
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scheme-interpreter.onrender.com';
+
 export default function SchemeInterpreter() {
     const [history, setHistory] = useState<string[]>([]);
     const [currentInput, setCurrentInput] = useState('');
@@ -23,13 +26,11 @@ export default function SchemeInterpreter() {
     }, [history, currentInput]);
 
     const handleKeyDown = async (e: React.KeyboardEvent<HTMLSpanElement>) => {
-        const apiUrl = '/api';  // This will work both locally and in production
-
         if (e.key === 'Enter') {
             e.preventDefault();
             if (currentInput.trim()) {
                 try {
-                    const response = await fetch(`${apiUrl}/scheme-interpreter`, {
+                    const response = await fetch(`${API_URL}/scheme-interpreter`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
