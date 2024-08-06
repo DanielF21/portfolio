@@ -104,7 +104,7 @@ export const DATA = {
     projects: [
       {
         title: "Scheme Interpreter",
-        href: "danielfleming.xyz/scheme-interpreter",
+        href: "/scheme-interpreter",
         dates: "November 2022 - December 202",
         active: true,
         description:
@@ -120,7 +120,7 @@ export const DATA = {
         links: [
           {
             type: "Website",
-            href: "danielfleming.xyz/scheme-interpreter",
+            href: "/scheme-interpreter",
             icon: <Icons.globe className="size-3" />,
           },
         ],
