@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 // API URL - your Render API URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scheme-interpreter.onrender.com';
@@ -25,7 +25,7 @@ export default function SchemeInterpreter() {
         }
     }, [history, currentInput]);
 
-    const handleKeyDown = async (e: React.KeyboardEvent<HTMLSpanElement>) => {
+    const handleKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLSpanElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             if (currentInput.trim()) {
@@ -49,24 +49,24 @@ export default function SchemeInterpreter() {
                 }
             }
         }
-    };
+    }, [currentInput]);
 
-    const handleInput = (e: React.FormEvent<HTMLSpanElement>) => {
+    const handleInput = useCallback((e: React.FormEvent<HTMLSpanElement>) => {
         const text = (e.target as HTMLSpanElement).textContent || '';
         setCurrentInput(text);
-    };
+    }, []);
 
     return (
-        <div className="p-4 w-full">
-            <div className="mb-8 p-6 bg-gray-100 text-gray-800 rounded-lg shadow-md w-full">
+        <div className="w-full">
+            <div className="mb-8 p-6 bg-gray-100 text-gray-800 rounded-lg shadow-md">
                 <section id="about" className="mb-4">
                     <h2 className="text-2xl font-semibold mb-2">What is Scheme?</h2>
-                    <p>Scheme is a dialect of the Lisp programming language known for its simplicity and elegance. It's a functional language with a strong emphasis on recursion and higher-order functions. Scheme is often used for teaching programming concepts and as a foundation for other languages.</p>
+                    <p>Scheme is a dialect of the Lisp programming language known for its simplicity and elegance. It&apos;s a functional language with a strong emphasis on recursion and higher-order functions. Scheme is often used for teaching programming concepts and as a foundation for other languages.</p>
                 </section>
                 
                 <section id="interpreter" className="mb-4">
                     <h2 className="text-2xl font-semibold mb-2">About This Interpreter</h2>
-                    <p>This Python-based interpreter provides a basic implementation of the Scheme language. It supports a subset of Scheme features, allowing you to explore the language's core concepts and syntax.</p>
+                    <p>This Python-based interpreter provides a basic implementation of the Scheme language. It supports a subset of Scheme features, allowing you to explore the language&apos;s core concepts and syntax.</p>
                 </section>
                 
                 <section id="features" className="mb-4">
@@ -86,24 +86,22 @@ export default function SchemeInterpreter() {
             </div>
             
             <div 
-                className="bg-black text-green-400 p-6 h-[60vh] w-full overflow-auto mb-4 rounded-lg shadow-lg font-mono text-lg"
+                className="bg-black text-green-400 p-6 h-[60vh] overflow-auto mb-4 rounded-lg shadow-lg font-mono text-lg"
             >
                 <div ref={consoleRef}>
                     {history.map((line, index) => (
-                        <div key={index}>{line}</div>
+                        <div key={`${index}-${line}`}>{line}</div>
                     ))}
                     <div className="flex">
-                        <span className="mr-1">in{'>'}</span>
+                        <span className="mr-1">in&gt;</span>
                         <span
                             ref={inputRef}
-                            contentEditable
-                            suppressContentEditableWarning
+                            dangerouslySetInnerHTML={{ __html: currentInput }}
                             onKeyDown={handleKeyDown}
                             onInput={handleInput}
                             className="outline-none flex-1"
-                        >
-                            {currentInput}
-                        </span>
+                            contentEditable
+                        />
                     </div>
                 </div>
             </div>
