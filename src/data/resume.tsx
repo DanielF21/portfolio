@@ -105,7 +105,7 @@ export const DATA = {
       {
         title: "Scheme Interpreter",
         href: "/scheme-interpreter",
-        dates: "November 2022 - December 202",
+        dates: "November 2022 - December 2022",
         active: true,
         description:
           "Developed a Python based Scheme Language Interpreter.",
@@ -125,6 +125,28 @@ export const DATA = {
           },
         ],
         image: {src: "/scheme.png", width: 400, height: 200},
+        video:
+          "",
+      },
+      {
+        title: "Enhancing Stable Diffusion with ControlNet",
+        href: "/SD-ControlNet",
+        dates: "April 2024 - May 2024",
+        active: true,
+        description:
+          "Fine-tuned Stable Diffusion by integrating ControlNet to incorporate color information by conditioning the model on colored edge maps alongside text prompts to improve image fidelity.",
+        technologies: [
+          "Python",
+          "OpenCV",
+        ],
+        links: [
+          {
+            type: "Website",
+            href: "/SD-ControlNet",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/SD.png", width: 400, height: 200},
         video:
           "",
       },
