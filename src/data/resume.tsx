@@ -151,6 +151,29 @@ export const DATA = {
         video:
           "",
       },
+      {
+        title: "AI-Mammogram Analysis",
+        href: "https://github.com/DanielF21/cnn-mammogram/tree/main",
+        dates: "March 2024 - April 2024",
+        active: true,
+        description:
+          "Improved breast cancer detection to 93.4% validation accuracy by training a Mask R-CNN model for classifying and segmenting mammogram images.",
+        technologies: [
+          "Python",
+          "PyTorch",
+          "OpenCV",
+        ],
+        links: [
+          {
+            type: "Website",
+            href: "/https://github.com/DanielF21/cnn-mammogram/tree/main",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/mammogram.png", width: 400, height: 200},
+        video:
+          "",
+      },
     ],
 
   hackathons: [
