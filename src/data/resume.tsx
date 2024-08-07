@@ -8,7 +8,7 @@ export const DATA = {
   location: "Boston, MA",
   locationLink: "https://www.google.com/maps/place/boston",
   description:
-    "Tech enthusiast and MIT graduate focused on impactful solutions.",
+    "Data Science | Building ML Models | MIT Grad",
   summary:
     "In 2024, I graduated from MIT with a BS in Computer Science and Engineering. I've done data science research for the NBA and developed image processing algorithms for the Digital Humanities Lab. Talk to me about bullet chess and distance running!",
   avatarUrl: "/me.png",
