@@ -174,6 +174,30 @@ export const DATA = {
         video:
           "",
       },
+      {
+        title: "Computational Analysis of Hi-C and RNA-seq Datasets",
+        href: "https://github.com/DanielF21/Genome-DataScience",
+        dates: "March 2024",
+        active: true,
+        description:
+          "Identified interchromosomal interactions in Hi-C data by detecting 442 high-interaction regions (p < 0.01) by developing a greedy search algorithm.",
+        technologies: [
+          "Python",
+          "NumPy",
+          "Sklearn",
+          "Pandas",
+        ],
+        links: [
+          {
+            type: "Website",
+            href: "https://github.com/DanielF21/Genome-DataScience",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/chromosome.png", width: 400, height: 200},
+        video:
+          "",
+      },
     ],
 
   hackathons: [
