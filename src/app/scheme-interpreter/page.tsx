@@ -58,7 +58,12 @@ export default function SchemeInterpreter() {
 
     return (
         <div className="w-full">
-            <div className="mb-8 p-6 bg-gray-100 text-gray-800 rounded-lg shadow-md">
+            {/* Red Note Box */}
+            <div className="bg-red-100 text-red-700 border border-red-300 rounded p-4 mb-4 w-full max-w-md mx-auto text-center">
+                <strong>Note:</strong> The first command you enter may take up to 45 seconds to respond, as the backend needs to initialize. Thank you for your patience!
+            </div>
+
+            <div className="mb-8 p-6 bg-gray-100 text-gray-800 rounded-lg shadow-md w-full">
                 <section id="about" className="mb-4">
                     <h2 className="text-2xl font-semibold mb-2">What is Scheme?</h2>
                     <p>Scheme is a dialect of the Lisp programming language known for its simplicity and elegance. It&apos;s a functional language with a strong emphasis on recursion and higher-order functions. Scheme is often used for teaching programming concepts and as a foundation for other languages.</p>
@@ -86,7 +91,7 @@ export default function SchemeInterpreter() {
             </div>
             
             <div 
-                className="bg-black text-green-400 p-6 h-[60vh] overflow-auto mb-4 rounded-lg shadow-lg font-mono text-lg"
+                className="bg-black text-green-400 p-6 h-[60vh] w-full overflow-auto mb-4 rounded-lg shadow-lg font-mono text-lg"
             >
                 <div ref={consoleRef}>
                     {history.map((line, index) => (
