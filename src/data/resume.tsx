@@ -198,6 +198,30 @@ export const DATA = {
         video:
           "",
       },
+      {
+        title: "Performance-Based NBA Clustering",
+        href: "/NBA-clustering",
+        dates: "May 2024",
+        active: true,
+        description:
+          "Identified interchromosomal interactions in Hi-C data by detecting 442 high-interaction regions (p < 0.01) by developing a greedy search algorithm.",
+        technologies: [
+          "Python",
+          "NumPy",
+          "Sklearn",
+          "Pandas",
+        ],
+        links: [
+          {
+            type: "Website",
+            href: "/NBA-clustering",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/nba_cluster.png", width: 400, height: 200},
+        video:
+          "",
+      },
     ],
 
   hackathons: [
