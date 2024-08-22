@@ -204,7 +204,7 @@ export const DATA = {
         dates: "May 2024",
         active: true,
         description:
-          "Identified interchromosomal interactions in Hi-C data by detecting 442 high-interaction regions (p < 0.01) by developing a greedy search algorithm.",
+          "Developed a player clustering model for the NBA using advanced statistical techniques such as multidimensional scaling and k-means clustering, enhancing the understanding of player roles and contributions beyond traditional positional classifications.",
         technologies: [
           "Python",
           "NumPy",
