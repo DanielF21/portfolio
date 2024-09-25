@@ -15,33 +15,26 @@ export default function ChessGame() {
     useEffect(() => {
         console.log('Chess API URL:', API_URL);
         
-        // Retrieve move history from localStorage
-        const savedMoveHistory = localStorage.getItem('moveHistory');
-        if (savedMoveHistory) {
-            setMoveHistory(JSON.parse(savedMoveHistory));
-        }
-
-        // API status check and initial board state fetch
-        fetch(`${API_URL}/board`)
-            .then(response => {
+        // Call the /reset endpoint on page load
+        const resetGameOnLoad = async () => {
+            try {
+                const response = await fetch(`${API_URL}/reset`, { method: 'POST' });
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                return response.json();
-            })
-            .then(data => {
-                console.log('Initial board state:', data);
-                if (data.fen) {
-                    setGame(new Chess(data.fen));
-                } else {
-                    setGame(new Chess());
-                }
+                const data = await response.json();
+                console.log('Reset response:', data);
+                setGame(new Chess());
+                setMoveHistory([]);
+                localStorage.removeItem('moveHistory');
                 setLoading(false);
-            })
-            .catch(error => {
-                console.error('Error checking API status:', error);
+            } catch (error) {
+                console.error('Error resetting game on load:', error);
                 setLoading(false);
-            });
+            }
+        };
+
+        resetGameOnLoad();
     }, []);
 
     const updateMoveHistory = (newMove: string, isPlayerMove: boolean) => {
