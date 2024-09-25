@@ -155,8 +155,8 @@ export default function ChessGame() {
     }
 
     return (
-        <div className="flex w-full h-full">
-            <div className="flex flex-col mr-10" ref={chessboardRef} style={{ height: '75vh', width: '75vh' }}>
+        <div className="flex flex-col md:flex-row w-full h-full">
+            <div className="flex flex-col mr-10 mb-10 md:mb-0" ref={chessboardRef} style={{ height: '75vh', width: '75vh' }}>
                 <div className="flex-1">
                     <Chessboard position={game.fen()} onPieceDrop={onDrop} arePiecesDraggable={!game.isGameOver()} />
                 </div>
@@ -167,7 +167,7 @@ export default function ChessGame() {
                     Reset Game
                 </button>
             </div>
-            <div className="w-1/4 flex flex-col gap-4 mr-10" style={{ height: '75vh', width: '25vh' }}>
+            <div className="w-full md:w-1/4 flex flex-col gap-4 mr-10 mb-10 md:mb-0" style={{ height: '75vh', width: '25vh' }}>
                 <h2 className="text-xl font-semibold mb-2 items-center text-center" style={{ fontSize: '30px' }}>Move History</h2>
                 <div 
                     className="bg-gray-100 p-4 rounded-lg overflow-y-auto h-full"
@@ -177,10 +177,11 @@ export default function ChessGame() {
                     ))}
                 </div>
             </div>
-            <div className="w-1/4 flex flex-col gap-4 items-center " style={{ height: '75vh', width: '50vh', fontSize: '20x' }}> {/* Centered About Section */}
+            <div className="w-full md:w-1/4 flex flex-col gap-4 items-center" style={{ height: '75vh', fontSize: '20px' }}> {/* Centered About Section */}
                 <h2 className="text-xl font-semibold mb-2" style={{ fontSize: '30px' }}>About DanielBot</h2>
                 <p className="text-center" style={{ fontSize: '20px' }}>
-                DanielBot is a chess engine with the goal of playing like me (<a href="https://www.chess.com/member/the-potato" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">My Chess.com profile</a>). It is trained on a dataset of 1,000,000+ lichess games of players rated between 1600 and 2000, and fine-tuned on my personal opening repertoire. It utilizes a Convolutional Neural Network (CNN) architecture to learn chess patterns from numerous games and predict likely future board states, with a bias to mimick my early game strategies.</p>
+                    DanielBot is a chess engine with the goal of playing like me (<a href="https://www.chess.com/member/the-potato" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">My Chess.com profile</a>). It is trained on a dataset of 1,000,000+ lichess games of players rated between 1600 and 2000, and fine-tuned on my personal opening repertoire. It utilizes a Convolutional Neural Network (CNN) architecture to learn chess patterns from numerous games and predict likely future board states, with a bias to mimick my early game strategies.
+                </p>
                 <div className="flex flex-col space-y-2"> 
                     <a href="https://github.com/DanielF21/chess-bot/" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">See the source code on Github</a>
                 </div>
