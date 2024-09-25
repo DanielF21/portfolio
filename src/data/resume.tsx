@@ -121,7 +121,7 @@ export const DATA = {
         links: [
           {
             type: "Website",
-            href: "/chess",
+            href: "https://github.com/DanielF21/chess-bot/",
             icon: <Icons.globe className="size-3" />,
           },
         ],
@@ -180,7 +180,7 @@ export const DATA = {
       },
       {
         title: "AI-Mammogram Analysis",
-        href: "https://github.com/DanielF21/cnn-mammogram/tree/main",
+        href: "https://github.com/DanielF21/cnn-mammogram",
         dates: "March 2024 - April 2024",
         active: true,
         description:
@@ -193,7 +193,7 @@ export const DATA = {
         links: [
           {
             type: "Website",
-            href: "/https://github.com/DanielF21/cnn-mammogram/tree/main",
+            href: "/https://github.com/DanielF21/cnn-mammogram",
             icon: <Icons.globe className="size-3" />,
           },
         ],

@@ -180,7 +180,7 @@ export default function ChessGame() {
                     className="bg-gray-100 p-4 rounded-lg overflow-y-auto h-full"
                 >
                     {moveHistory.map((move, index) => (
-                        <div key={index} className="mb-1 text-2xl">{move}</div>
+                        <div key={index} className="mb-1 text-xl">{move}</div>
                     ))}
                 </div>
             </div>
