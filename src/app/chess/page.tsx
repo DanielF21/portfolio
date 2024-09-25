@@ -3,6 +3,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 const API_URL = process.env.NEXT_PUBLIC_CHESS_API_URL || 'https://chess-bot-slni.onrender.com';
 
@@ -15,7 +18,6 @@ export default function ChessGame() {
     useEffect(() => {
         console.log('Chess API URL:', API_URL);
         
-        // Call the /reset endpoint on page load
         const resetGameOnLoad = async () => {
             try {
                 const response = await fetch(`${API_URL}/reset`, { method: 'POST' });
@@ -41,8 +43,8 @@ export default function ChessGame() {
         setMoveHistory(prev => {
             const updatedHistory = [...prev];
             if (isPlayerMove) {
-                const moveNumber = updatedHistory.length + 1;
-                updatedHistory.push(`${moveNumber}. ${newMove}`);
+                const moveNumber = Math.floor(updatedHistory.length) + 1;
+                updatedHistory.push(`${moveNumber}.${newMove}`);
             } else {
                 updatedHistory[updatedHistory.length - 1] += ` ${newMove}`;
             }
@@ -124,7 +126,6 @@ export default function ChessGame() {
         const uciMove = move.from + move.to + (move.promotion || '');
         console.log('UCI move:', uciMove);
         
-        // Update the game state immediately after the player's move
         setGame(new Chess(game.fen()));
         updateMoveHistory(move.san, true);
         
@@ -151,39 +152,85 @@ export default function ChessGame() {
     };
 
     if (loading || !game) {
-        return <div>Loading... This may take up to a minute on the first load.</div>;
+        return <div className="flex items-center justify-center h-screen">Loading... This may take up to a minute on the first load.</div>;
     }
 
     return (
-        <div className="flex flex-col md:flex-row w-full h-full">
-            <div className="flex flex-col mr-10 mb-10 md:mb-0" ref={chessboardRef} style={{ height: '75vh', width: '75vh' }}>
-                <div className="flex-1">
-                    <Chessboard position={game.fen()} onPieceDrop={onDrop} arePiecesDraggable={!game.isGameOver()} />
-                </div>
-                <button 
-                    onClick={resetGame}
-                    className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                    Reset Game
-                </button>
-            </div>
-            <div className="w-full md:w-1/4 flex flex-col gap-4 mr-10 mb-10 md:mb-0" style={{ height: '75vh', width: '25vh' }}>
-                <h2 className="text-xl font-semibold mb-2 items-center text-center" style={{ fontSize: '30px' }}>Move History</h2>
-                <div 
-                    className="bg-gray-100 p-4 rounded-lg overflow-y-auto h-full"
-                >
-                    {moveHistory.map((move, index) => (
-                        <div key={index} className="mb-1 text-xl">{move}</div>
-                    ))}
-                </div>
-            </div>
-            <div className="w-full md:w-1/4 flex flex-col gap-4 items-center" style={{ height: '75vh', fontSize: '20px' }}> {/* Centered About Section */}
-                <h2 className="text-xl font-semibold mb-2" style={{ fontSize: '30px' }}>About DanielBot</h2>
-                <p className="text-center" style={{ fontSize: '20px' }}>
-                    DanielBot is a chess engine with the goal of playing like me (<a href="https://www.chess.com/member/the-potato" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">My Chess.com profile</a>). It is trained on a dataset of 1,000,000+ lichess games of players rated between 1600 and 2000, and fine-tuned on my personal opening repertoire. It utilizes a Convolutional Neural Network (CNN) architecture to learn chess patterns from numerous games and predict likely future board states, with a bias to mimick my early game strategies.
-                </p>
-                <div className="flex flex-col space-y-2"> 
-                    <a href="https://github.com/DanielF21/chess-bot/" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">See the source code on Github</a>
+        <div className="container mx-auto px-4 py-8">
+            <div className="flex flex-col xl:flex-row gap-8">
+                <Card className="xl:w-1/2">
+                    <CardContent className="p-6">
+                        <div ref={chessboardRef} className="aspect-square w-full max-w-[120vh] mx-auto">
+                            <Chessboard 
+                                position={game.fen()} 
+                                onPieceDrop={onDrop} 
+                                arePiecesDraggable={!game.isGameOver()} 
+                            />
+                        </div>
+                        <div className="mt-4 flex justify-center">
+                            <Button onClick={resetGame} variant="outline" className="text-lg py-2 px-4">
+                                Reset Game
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+                
+                <div className="xl:w-1/2 flex flex-col gap-8">
+                    <Card className="border border-primary/30 shadow-md rounded-lg overflow-hidden xl:mt-5">
+                        <CardHeader className="bg-primary/5 border-b border-primary/10 px-4">
+                            <CardTitle className="text-2xl">Move History</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                            <ScrollArea className="h-[18vh] xl:h-[26vh]">
+                                <div className="flex flex-wrap gap-2">
+                                    {moveHistory.map((move, index) => (
+                                        <span key={index} className="text-sm font-mono bg-secondary/20 px-2 py-1 rounded">
+                                            {move}
+                                        </span>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="border border-primary/30 shadow-md rounded-lg overflow-hidden">
+                        <CardHeader className="bg-primary/5 border-b border-primary/10 px-4">
+                            <CardTitle className="text-2xl">About DanielBot</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 pb-8">
+                            <p className="text-lg text-muted-foreground mb-6">
+                                DanielBot is a chess engine designed to play like me. It's trained on over 1,000,000 lichess games from players rated 1600-2000 and fine-tuned on my personal opening repertoire. Using a Convolutional Neural Network (CNN), it learns chess patterns and predicts future board states, mimicking my early game strategies.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                <Button 
+                                    asChild
+                                    variant="outline"
+                                    className="w-full sm:w-auto"
+                                >
+                                    <a 
+                                        href="https://www.chess.com/member/the-potato" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                    >
+                                        My Chess.com profile
+                                    </a>
+                                </Button>
+                                <Button 
+                                    asChild
+                                    variant="outline"
+                                    className="w-full sm:w-auto"
+                                >
+                                    <a 
+                                        href="https://github.com/DanielF21/chess-bot/" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                    >
+                                        See the source code on Github
+                                    </a>
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>
