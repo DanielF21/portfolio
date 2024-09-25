@@ -175,7 +175,7 @@ export default function ChessGame() {
                 </button>
             </div>
             <div className="w-1/4 flex flex-col gap-4 mr-10" style={{ height: '75vh', width: '25vh' }}>
-                <h2 className="text-xl font-semibold mb-2 items-center" style={{ fontSize: '30px' }}>Move History</h2>
+                <h2 className="text-xl font-semibold mb-2 items-center text-center" style={{ fontSize: '30px' }}>Move History</h2>
                 <div 
                     className="bg-gray-100 p-4 rounded-lg overflow-y-auto h-full"
                 >
