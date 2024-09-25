@@ -158,7 +158,7 @@ export default function ChessGame() {
     };
 
     if (loading || !game) {
-        return <div>Loading...</div>;
+        return <div>Loading... This may take up to a minute on the first load.</div>;
     }
 
     return (
