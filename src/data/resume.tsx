@@ -22,9 +22,10 @@ export const DATA = {
     "NumPy",
     "PyTorch",
     "OpenCV",
-    "Java",
     "C++",
-    "Assembly"
+    "Assembly",
+    "Google Cloud Platform",
+    "Flask",
   ],
   navbar: [
     { href: "/", icon: HomeIcon, label: "Home" },
@@ -103,6 +104,32 @@ export const DATA = {
     },
   ],
     projects: [
+      {
+        title: "Chess Bot",
+        href: "/chess",
+        dates: "August 2024 - September 2024",
+        active: true,
+        description:
+          "Trained and fine-tuned a CNN on 1M+ lichess games to create a chess engine that mimics my personal playing style",
+        technologies: [
+          "Python",
+          "NumPy",
+          "Tensorflow",
+          "Google Cloud Platform",
+          "Flask",
+        ],
+        links: [
+          {
+            type: "Website",
+            href: "/chess",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/chess.png", width: 400, height: 200},
+        video:
+          "",
+      },
+
       {
         title: "Scheme Interpreter",
         href: "/scheme-interpreter",

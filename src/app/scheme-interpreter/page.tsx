@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
-// API URL - your Render API URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://scheme-interpreter.onrender.com';
 
 export default function SchemeInterpreter() {
