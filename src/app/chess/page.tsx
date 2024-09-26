@@ -37,6 +37,16 @@ export default function ChessGame() {
         };
 
         resetGameOnLoad();
+
+        // Keep-alive logic
+        const interval = setInterval(() => {
+            fetch(`${API_URL}/board`)
+                .then(response => response.json())
+                .catch(error => console.error('Error:', error));
+        }, 14 * 60 * 1000); // 14 minutes in milliseconds
+        // Cleanup interval on component unmount
+        return () => clearInterval(interval);
+        
     }, []);
 
     const updateMoveHistory = (newMove: string, isPlayerMove: boolean) => {
