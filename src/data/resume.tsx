@@ -120,7 +120,7 @@ export const DATA = {
         ],
         links: [
           {
-            type: "Website",
+            type: "Github",
             href: "https://github.com/DanielF21/chess-bot/",
             icon: <Icons.globe className="size-3" />,
           },
@@ -147,8 +147,8 @@ export const DATA = {
         ],
         links: [
           {
-            type: "Website",
-            href: "/scheme-interpreter",
+                type: "Github",
+                href: "https://github.com/DanielF21/Scheme-Interpreter",
             icon: <Icons.globe className="size-3" />,
           },
         ],
@@ -192,8 +192,8 @@ export const DATA = {
         ],
         links: [
           {
-            type: "Website",
-            href: "/https://github.com/DanielF21/cnn-mammogram",
+            type: "Github",
+            href: "https://github.com/DanielF21/cnn-mammogram",
             icon: <Icons.globe className="size-3" />,
           },
         ],
@@ -216,7 +216,7 @@ export const DATA = {
         ],
         links: [
           {
-            type: "Website",
+            type: "Github",
             href: "https://github.com/DanielF21/Genome-DataScience",
             icon: <Icons.globe className="size-3" />,
           },
