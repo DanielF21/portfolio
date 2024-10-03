@@ -216,15 +216,14 @@ export default function Page() {
                 Get in Touch
               </h2>
               <p className="mx-auto max-w-[600px] text-muted-foreground md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed">
-                Want to chat? Just shoot me a dm{" "}
-                <Link
-                  href={DATA.contact.social.X.url}
+                You can reach out to me at{" "}
+                <a
+                  href="mailto:daniel11ftw@gmail.com"
                   className="text-blue-500 hover:underline"
-                  target = "_blank"
                 >
-                  with a direct question on twitter
-                </Link>{" "}
-                and I&apos;ll respond whenever I can.
+                  daniel11ftw@gmail.com
+                </a>
+                .
               </p>
             </div>
           </BlurFade>

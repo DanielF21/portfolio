@@ -129,33 +129,6 @@ export const DATA = {
         video:
           "",
       },
-
-      {
-        title: "Scheme Interpreter",
-        href: "/scheme-interpreter",
-        dates: "November 2022 - December 2022",
-        active: true,
-        description:
-          "Developed a Python based Scheme Language Interpreter.",
-        technologies: [
-          "Next.js",
-          "Typescript",
-          "Python",
-          "TailwindCSS",
-          "Shadcn UI",
-          "Magic UI",
-        ],
-        links: [
-          {
-                type: "Github",
-                href: "https://github.com/DanielF21/Scheme-Interpreter",
-            icon: <Icons.globe className="size-3" />,
-          },
-        ],
-        image: {src: "/scheme.png", width: 400, height: 200},
-        video:
-          "",
-      },
       {
         title: "Enhancing Stable Diffusion with ControlNet",
         href: "/SD-ControlNet",
@@ -246,6 +219,32 @@ export const DATA = {
           },
         ],
         image: {src: "/nba_cluster.png", width: 400, height: 200},
+        video:
+          "",
+      },
+      {
+        title: "Scheme Interpreter",
+        href: "/scheme-interpreter",
+        dates: "November 2022 - December 2022",
+        active: true,
+        description:
+          "Developed a Python based Scheme Language Interpreter.",
+        technologies: [
+          "Next.js",
+          "Typescript",
+          "Python",
+          "TailwindCSS",
+          "Shadcn UI",
+          "Magic UI",
+        ],
+        links: [
+          {
+                type: "Github",
+                href: "https://github.com/DanielF21/Scheme-Interpreter",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/scheme.png", width: 400, height: 200},
         video:
           "",
       },
