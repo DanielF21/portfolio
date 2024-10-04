@@ -105,6 +105,29 @@ export const DATA = {
   ],
     projects: [
       {
+        title: "Spotify Insights",
+        href: "https://spotify-app-six-rosy.vercel.app",
+        dates: "October 2024",
+        active: true,
+        description:
+          "This web application connects to Spotify, using Supabase for OAuth and storage, to provide users with insights and visualizations of their listening habits.",
+        technologies: [
+          "Next.js",
+          "Supabase",
+          "OAuth2.0",
+        ],
+        links: [
+          {
+                type: "Github",
+                href: "https://github.com/DanielF21/nextjs-supabase-auth",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/spotify.png", width: 400, height: 200},
+        video:
+          "",
+      },
+      {
         title: "Chess Bot",
         href: "/chess",
         dates: "August 2024 - September 2024",
