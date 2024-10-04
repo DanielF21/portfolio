@@ -1,8 +1,8 @@
 {
-    "rewrites": [
-      { 
-        "source": "/spotify-insights/:path*",
-        "destination": "https://spotify-6ppuwxweq-danielf21s-projects.vercel.app/:path*"
-      }
-    ]
-  }
+  "rewrites": [
+    { 
+      "source": "/spotify-insights/:path*",
+      "destination": "https://spotify-app-six-rosy.vercel.app/spotify-insights/:path*"
+    }
+  ]
+}
