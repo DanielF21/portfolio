@@ -9,10 +9,10 @@ const nextConfig = {
       },
       {
         source: '/spotify-insights/:path*',
-        destination: 'https://spotify-6ppuwxweq-danielf21s-projects.vercel.app/spotify-insights/:path*',
+        destination: 'https://spotify-app-six-rosy.vercel.app/spotify-insights/:path*',
       },
     ];
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;
