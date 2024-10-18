@@ -106,7 +106,7 @@ export const DATA = {
     projects: [
       {
         title: "Health Lens",
-        href: "https://healthlens.app",
+        href: "https://www.healthlens.app/",
         dates: "October 2024",
         active: true,
         description:
@@ -121,7 +121,7 @@ export const DATA = {
         links: [
           {
                 type: "Website",
-                href: "https:/healthlens.app",
+                href: "https://www.healthlens.app/",
             icon: <Icons.globe className="size-3" />,
           },
         ],
