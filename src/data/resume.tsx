@@ -115,6 +115,7 @@ export const DATA = {
           "Next.js",
           "Node.js",
           "Flask",
+          "Supabase",
           "IBM Cloud"
         ],
         links: [
