@@ -105,6 +105,30 @@ export const DATA = {
   ],
     projects: [
       {
+        title: "Health Lens",
+        href: "healthlens.app",
+        dates: "October 2024",
+        active: true,
+        description:
+          "Created a free skin and eye diagnosing service to enhance healthcare access and promote health literacy in underserved communities.",
+        technologies: [
+          "Next.js",
+          "Node.js",
+          "Flask",
+          "IBM Cloud"
+        ],
+        links: [
+          {
+                type: "Website",
+                href: "https:/healthlens.app",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/healthlens.png", width: 400, height: 200},
+        video:
+          "",
+      },
+      {
         title: "Spotify Insights",
         href: "https://spotify-app-six-rosy.vercel.app",
         dates: "October 2024",
@@ -119,7 +143,7 @@ export const DATA = {
         links: [
           {
                 type: "Github",
-                href: "https://github.com/DanielF21/nextjs-supabase-auth",
+                href: "https://github.com/DanielF21/spotify-insights",
             icon: <Icons.globe className="size-3" />,
           },
         ],
