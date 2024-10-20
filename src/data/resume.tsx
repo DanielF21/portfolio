@@ -26,6 +26,8 @@ export const DATA = {
     "Assembly",
     "Google Cloud Platform",
     "Flask",
+    "Supabase",
+    "RAG",
   ],
   navbar: [
     { href: "/", icon: HomeIcon, label: "Home" },
