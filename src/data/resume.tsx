@@ -107,6 +107,28 @@ export const DATA = {
   ],
     projects: [
       {
+        title: "Mexican Food Chatbot",
+        href: "https://rag-recipes.vercel.app/",
+        dates: "October 2024",
+        active: true,
+        description:
+          "Scraped over 3,000 webpages to build a Retrieval Augmented Generation (RAG) pipeline for personalized Mexican recipe suggestions.",
+        technologies: [
+          "Next.js",
+          "Vector Database"
+        ],
+        links: [
+          {
+                type: "Github",
+                href: "https://github.com/DanielF21/rag-recipes",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/mexican-food.png", width: 400, height: 200},
+        video:
+          "",
+      },
+      {
         title: "Health Lens",
         href: "https://www.healthlens.app/",
         dates: "October 2024",
