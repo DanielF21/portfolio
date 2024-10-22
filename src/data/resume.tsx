@@ -112,9 +112,10 @@ export const DATA = {
         dates: "October 2024",
         active: true,
         description:
-          "Scraped over 3,000 webpages to build a Retrieval Augmented Generation (RAG) pipeline for personalized Mexican recipe suggestions.",
+          "Built a Retrieval Augmented Generation (RAG) pipeline for personalized Mexican recipe suggestions by scraping over 3,000 webpages.",
         technologies: [
           "Next.js",
+          "RAG",
           "Vector Database"
         ],
         links: [
