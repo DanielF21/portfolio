@@ -137,7 +137,6 @@ export const DATA = {
         description:
           "Created a free skin and eye diagnosing service to enhance healthcare access and promote health literacy in underserved communities.",
         technologies: [
-          "Next.js",
           "Node.js",
           "Flask",
           "Supabase",
