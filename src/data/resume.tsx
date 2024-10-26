@@ -163,7 +163,7 @@ export const DATA = {
         technologies: [
           "Next.js",
           "Supabase",
-          "OAuth2.0",
+          "OAuth",
         ],
         links: [
           {
