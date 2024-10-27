@@ -1,5 +1,5 @@
 import { Icons } from "@/components/icons";
-import { CodeIcon, HomeIcon, NotebookIcon, PencilLine } from "lucide-react";
+import { CodeIcon, HomeIcon, Link, NotebookIcon, PencilLine } from "lucide-react";
 
 export const DATA = {
   name: "Daniel Fleming",
@@ -15,9 +15,11 @@ export const DATA = {
   skills: [
     "React",
     "Next.js",
+    "Node.js",
     "Typescript",
     "Tailwind CSS",
     "Python",
+    "Flask",
     "Sklearn",
     "NumPy",
     "PyTorch",
@@ -25,9 +27,9 @@ export const DATA = {
     "C++",
     "Assembly",
     "Google Cloud Platform",
-    "Flask",
     "Supabase",
-    "RAG",
+    "PostgreSQL",
+    "Vector Databases",
   ],
   navbar: [
     { href: "/", icon: HomeIcon, label: "Home" },
@@ -323,8 +325,6 @@ export const DATA = {
     ],
 
   hackathons: [
-  
-  
    
   ],
 } as const;
