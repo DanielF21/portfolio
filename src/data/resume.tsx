@@ -116,6 +116,7 @@ export const DATA = {
         description:
           "Developed a web application that enables users to upload PDFs of Quarterly Reports, extract financial data, and generate CSV reports, enhancing data accessibility and analysis for financial reporting.",
         technologies: [
+          "Supabase",
           "Next.js",
           "OpenAI API",
           "Unstructured Data Parsing"
