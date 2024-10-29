@@ -109,6 +109,29 @@ export const DATA = {
   ],
     projects: [
       {
+        title: "Quarterly Report Parser",
+        href: "https://pdfportal.vercel.app/",
+        dates: "October 2024",
+        active: true,
+        description:
+          "Developed a web application that enables users to upload PDFs of Quarterly Reports, extract financial data, and generate CSV reports, enhancing data accessibility and analysis for financial reporting.",
+        technologies: [
+          "Next.js",
+          "OpenAI API",
+          "Unstructured Data Parsing"
+        ],
+        links: [
+          {
+                type: "Github",
+                href: "https://github.com/DanielF21/financial-parsing/",
+            icon: <Icons.globe className="size-3" />,
+          },
+        ],
+        image: {src: "/pdf.png", width: 400, height: 200},
+        video:
+          "",
+      },
+      {
         title: "Mexican Food Chatbot",
         href: "https://rag-recipes.vercel.app/",
         dates: "October 2024",
