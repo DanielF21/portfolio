@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DATA } from "@/data/resume";
 import Markdown from "react-markdown";
-
+import Navbar from "@/components/navbar";
 const BLUR_FADE_DELAY = 0.04;
 
 export default function Page() {
@@ -185,6 +185,7 @@ export default function Page() {
           </BlurFade>
         </div>
       </section>
+      <Navbar />
     </main>
   );
 }
