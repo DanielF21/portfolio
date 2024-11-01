@@ -27,6 +27,7 @@ export const DATA = {
     "C++",
     "Assembly",
     "Google Cloud Platform",
+    "AWS",
     "Supabase",
     "PostgreSQL",
     "Vector Databases",
