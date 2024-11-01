@@ -185,7 +185,9 @@ export default function Page() {
           </BlurFade>
         </div>
       </section>
-      <Navbar />
+      <div className="pb-8">
+        <Navbar />
+      </div>
     </main>
   );
 }
