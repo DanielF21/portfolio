@@ -128,7 +128,7 @@ export default function ChessGame() {
         const move = game.move({
             from: sourceSquare,
             to: targetSquare,
-            promotion: 'q', // always promote to a queen for simplicity
+            promotion: 'q', // always promote to a queen
         });
     
         if (move === null) return false;
