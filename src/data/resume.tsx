@@ -76,16 +76,16 @@ export const DATA = {
   work: [
   /*
     {
-      company: "Mitre Media",
-      href: "https://mitremedia.com/",
+      company: "",
+      href: "",
       badges: [],
-      location: "Toronto, ON",
-      title: "Software Engineer",
-      logoUrl: "/mitremedia.png",
-      start: "May 2017",
-      end: "August 2017",
+      location: "",
+      title: "",
+      logoUrl: "",
+      start: "",
+      end: "",
       description:
-        "Designed and implemented a robust password encryption and browser cookie storage system in Ruby on Rails. Leveraged the Yahoo finance API to develop the dividend.com equity screener",
+        "",
     },
   */
   ],
