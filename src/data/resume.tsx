@@ -40,7 +40,7 @@ export const DATA = {
   ],
   contact: {
     email: "daniel11ftw@gmail.com",
-    tel: "+123456789",
+    tel: "",
     social: {
       GitHub: {
         name: "GitHub",
