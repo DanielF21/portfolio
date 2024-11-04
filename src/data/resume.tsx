@@ -159,7 +159,7 @@ export const DATA = {
       {
         title: "Health Lens",
         href: "https://www.healthlens.app/",
-        dates: "October 2024",
+        dates: "August 2024 - October 2024",
         active: true,
         description:
           "Created a free skin and eye diagnosing service to enhance healthcare access and promote health literacy in underserved communities.",
