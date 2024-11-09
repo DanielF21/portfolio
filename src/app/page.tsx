@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DATA } from "@/data/resume";
 import Markdown from "react-markdown";
 import Navbar from "@/components/navbar";
-const BLUR_FADE_DELAY = 0.04;
+const BLUR_FADE_DELAY = 0.05;
 
 export default function Page() {
   return (
