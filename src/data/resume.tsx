@@ -6,9 +6,9 @@ export const DATA = {
   initials: "DF",
   url: "https://danielfleming.xyz",
   location: "Boston, MA",
-  locationLink: "https://www.google.com/maps/place/boston",
+  locationLink: "https://www.google.com/maps/place/san+francisco",
   description:
-    "MIT Grad | SWE | AI Engineer",
+    "MIT Grad | Software Engineer",
   summary:
     "In 2024, I graduated from MIT with a BS in Computer Science and Engineering. I've done data science research for the NBA and developed image processing algorithms for the Digital Humanities Lab. Talk to me about bullet chess and distance running!",
   avatarUrl: "/me.png",
@@ -24,6 +24,8 @@ export const DATA = {
     "NumPy",
     "PyTorch",
     "OpenCV",
+    "LangGraph",
+    "Pipecat",
     "C++",
     "Assembly",
     "Google Cloud Platform",
@@ -39,7 +41,6 @@ export const DATA = {
     { href: "#", icon: PencilLine, label: "Notes" },
   ],
   contact: {
-    email: "daniel11ftw@gmail.com",
     tel: "",
     social: {
       GitHub: {
@@ -53,22 +54,7 @@ export const DATA = {
         name: "LinkedIn",
         url: "https://www.linkedin.com/in/dannof/",
         icon: Icons.linkedin,
-
         navbar: true,
-      },
-      X: {
-        name: "X",
-        url: "https://x.com/dfleming_ai",
-        icon: Icons.x,
-
-        navbar: true,
-      },
-      email: {
-        name: "Send Email",
-        url: "#",
-        icon: Icons.email,
-
-        navbar: false,
       },
     },
   },
@@ -177,29 +163,6 @@ export const DATA = {
           },
         ],
         image: {src: "/healthlens.png", width: 400, height: 200},
-        video:
-          "",
-      },
-      {
-        title: "Spotify Insights",
-        href: "https://spotify-app-six-rosy.vercel.app",
-        dates: "October 2024",
-        active: true,
-        description:
-          "This web application connects to Spotify, using Supabase for OAuth and storage, to provide users with insights and visualizations of their listening habits.",
-        technologies: [
-          "Next.js",
-          "Supabase",
-          "OAuth",
-        ],
-        links: [
-          {
-                type: "Github",
-                href: "https://github.com/DanielF21/spotify-insights",
-            icon: <Icons.globe className="size-3" />,
-          },
-        ],
-        image: {src: "/spotify.png", width: 400, height: 200},
         video:
           "",
       },
