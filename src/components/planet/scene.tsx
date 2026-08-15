@@ -13,6 +13,7 @@ import {
 import { attachDrag, attachKeyboard } from "@/lib/planet/input";
 import type { PlanetMarker, SpawnPoint } from "@/lib/planet/types";
 
+import { Daylight } from "./daylight";
 import { Sky } from "./sky";
 import { World } from "./world";
 
@@ -132,12 +133,18 @@ export default function Scene({
       >
         <color attach="background" args={["#070b1c"]} />
 
-        {/* Two lights, both effectively free. No shadow maps: on a sphere the
+        {/* Three lights, all effectively free. No shadow maps: on a sphere the
             player orbits, the shadow camera would have to follow a changing up
-            vector for a result nobody looks at. */}
+            vector for a result nobody looks at.
+
+            The key light orbits (see Daylight), so at any moment half the
+            archipelago is on the night side. The ambient term is therefore
+            doing real work rather than being a token: it is the only thing
+            keeping an unlit island from reading as a void where a world should
+            be. Raised from 0.25 when the map went from four islands to five. */}
         <hemisphereLight intensity={0.55} color="#bcd8ff" groundColor="#241d3d" />
-        <directionalLight position={[14, 10, 8]} intensity={1.5} />
-        <ambientLight intensity={0.25} />
+        <Daylight />
+        <ambientLight intensity={0.34} />
 
         {!lowPower && <Sky />}
 

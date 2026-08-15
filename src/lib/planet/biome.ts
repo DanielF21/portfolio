@@ -1,14 +1,19 @@
 /**
- * Deterministic surface colour as a function of direction, water-world
- * edition.
+ * Deterministic surface colour as a function of direction.
  *
- * The sphere is ocean; each district is a tropical island. The district
- * weight (1 inside the core, falling to 0 across the falloff band) drives a
- * shoreline gradient: deep ocean, a turquoise shallows ring, a sand beach,
- * then the island's interior green.
+ * The sphere is ocean; each island is a cap of land. The island weight (1
+ * inside the core, falling to 0 across the falloff band) drives a shoreline
+ * gradient: deep ocean, that island's shallows ring, its beach, then its
+ * interior.
  *
- * Shared by the planet surface and the scatter props, so an islet rock in
- * the ocean reads sea-worn and a rock on an island reads earthy.
+ * Every stop after the deep ocean comes from the island's OWN palette (see
+ * `Palette` in districts.ts), which is what makes the archipelago read as five
+ * different climates rather than five tints of the same one. Approaching the
+ * volcanic island you cross rust coloured water onto black sand; approaching
+ * the ice island, pale meltwater onto grey shingle.
+ *
+ * Shared by the planet surface and the scatter props, so an islet rock in the
+ * ocean reads sea-worn and a rock on an island reads like its ground.
  *
  * This file must never import `three`; it returns plain [r, g, b] in 0..1.
  */
@@ -26,10 +31,6 @@ const OCEAN_PALETTE: readonly Rgb[] = [
   [0.08, 0.22, 0.36],
 ];
 
-/** Shoreline gradient stops. */
-const SHALLOW: Rgb = [0.2, 0.55, 0.58]; // turquoise ring off the beach
-const SAND: Rgb = [0.88, 0.8, 0.58];
-
 /** Offset keeps the ocean-depth centres off the island centres. */
 const CENTRES = fibonacciSphere(OCEAN_PALETTE.length, 0.18);
 
@@ -39,6 +40,18 @@ const SHARPNESS = 3.2;
 function smoothstep(edge0: number, edge1: number, x: number) {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
+}
+
+/**
+ * Smooth 0..1 field over the sphere, for blending an island's two interior
+ * tones. Two sine waves at incommensurate frequencies: continuous everywhere
+ * (so it never looks like noise), with a wavelength of roughly a third of an
+ * island (so a walk crosses two or three bands of it).
+ */
+function interiorMix(dir: Dir): number {
+  const a = Math.sin(dir.x * 5.7 + dir.y * 3.1 + dir.z * 4.3);
+  const b = Math.sin(dir.x * -3.3 + dir.y * 6.1 + dir.z * -2.7);
+  return 0.5 + 0.3 * a + 0.2 * b;
 }
 
 /**
@@ -71,26 +84,36 @@ export function biomeColor(dir: Dir): Rgb {
   // overlap (asserted in dev), so taking the max is exact.
   const weights = districtWeights(dir);
   let w = 0;
-  let ground: readonly [number, number, number] = SAND;
+  let best = -1;
   for (let i = 0; i < weights.length; i++) {
     if (weights[i] > w) {
       w = weights[i];
-      ground = DISTRICTS[i].ground;
+      best = i;
     }
   }
-  if (w > 0) {
+  if (w > 0 && best >= 0) {
+    const p = DISTRICTS[best].palette;
+
+    // Interior is a blend of the island's two ground tones. Resolved before
+    // the gradient so the beach fades into whichever tone is local, rather
+    // than into an average of the two.
+    const t = Math.min(1, Math.max(0, interiorMix(dir)));
+    const gr = p.ground[0] + (p.groundAlt[0] - p.ground[0]) * t;
+    const gg = p.ground[1] + (p.groundAlt[1] - p.ground[1]) * t;
+    const gb = p.ground[2] + (p.groundAlt[2] - p.ground[2]) * t;
+
     const toShallow = smoothstep(0, 0.06, w);
     const toSand = smoothstep(0.06, 0.45, w);
     const toGround = smoothstep(0.5, 0.85, w);
-    r += (SHALLOW[0] - r) * toShallow;
-    g += (SHALLOW[1] - g) * toShallow;
-    b += (SHALLOW[2] - b) * toShallow;
-    r += (SAND[0] - r) * toSand;
-    g += (SAND[1] - g) * toSand;
-    b += (SAND[2] - b) * toSand;
-    r += (ground[0] - r) * toGround;
-    g += (ground[1] - g) * toGround;
-    b += (ground[2] - b) * toGround;
+    r += (p.shallow[0] - r) * toShallow;
+    g += (p.shallow[1] - g) * toShallow;
+    b += (p.shallow[2] - b) * toShallow;
+    r += (p.sand[0] - r) * toSand;
+    g += (p.sand[1] - g) * toSand;
+    b += (p.sand[2] - b) * toSand;
+    r += (gr - r) * toGround;
+    g += (gg - g) * toGround;
+    b += (gb - b) * toGround;
   }
 
   return [r, g, b];

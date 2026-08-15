@@ -6,10 +6,18 @@
  * three.js out of the lazy chunk and into the shared bundle.
  */
 
-/** Planet radius in world units. 60% of the original 18: the water-world
- *  layout concentrates content on four tropical islands, so the sphere can be
- *  roomy without reading as empty. Half a lap is ~5.7s walking. */
-export const RADIUS = 10.8;
+/** Planet radius in world units.
+ *
+ *  History worth keeping, because this number has been wrong in both
+ *  directions: 18 originally, cut to 10.8 when the world was four small
+ *  islands and the sphere read as empty, now 16 for an archipelago with a
+ *  continent on it. Half a lap is ~8.4s walking, ~4.4s sprinting.
+ *
+ *  Everything angular scales with this for free (marker triggers, district
+ *  radii, scatter clearance). Everything measured in world units does NOT:
+ *  scenery scales, character size and camera distance all have to be
+ *  reconsidered by hand when this changes. */
+export const RADIUS = 16;
 
 /** Half the character's height; used to sit it on the surface. */
 export const CHAR_HALF_HEIGHT = 0.42;
@@ -62,8 +70,15 @@ export const MOVE_ACCEL_TAU = 0.09;
  *  roughly 20px tall in a 680px viewport, so its facing (the entire feedback
  *  channel for which way you are about to move) was unreadable, and the planet
  *  filling the frame meant every degree of camera yaw swept a huge amount of
- *  visible world. 13.5 still shows most of the sphere. Scroll zoom multiplies
- *  these, so 0.55x still gives a close-up and 2.2x restores the wide shot. */
+ *  visible world. Scroll zoom multiplies these, so 0.55x still gives a
+ *  close-up and 2.2x restores the wide shot.
+ *
+ *  DELIBERATELY NOT scaled up with RADIUS. The temptation when the planet grew
+ *  to 16 was to pull the camera back proportionally to keep the same amount of
+ *  sphere in frame, which is exactly the mistake this constant was lowered to
+ *  fix: the framing that matters is the CHARACTER's, not the planet's. Holding
+ *  the distance means a bigger planet reads as a nearer horizon, which is what
+ *  a bigger planet should feel like. */
 export const CAM_DISTANCE = 13.5;
 export const CAM_HEIGHT = 1.7;
 export const CAM_HEAD_OFFSET = 0.9;
@@ -130,10 +145,17 @@ export const CAM_ZOOM_SENS = 0.0015;
 export const CAM_ZOOM_SMOOTH = 0.18;
 
 export const CAM_FOV = 55;
+
+/** Field of view through the telescope, degrees. A 2.5x narrowing, which is
+ *  enough that a constellation fills a useful part of the frame without the
+ *  motion of the damped camera becoming sickening at the long end. */
+export const CAM_FOV_TELESCOPE = 22;
 export const CAM_NEAR = 0.1;
 /** Far plane sits beyond the sky props (sun sprite, gas giant, stars), which
- *  scaled out with the planet. */
-export const CAM_FAR = 340;
+ *  scaled out with the planet. Furthest star is at ~340, and the camera can
+ *  itself be ~53 out from the origin at maximum zoom, so 460 leaves headroom
+ *  rather than clipping the sky at the far corners. */
+export const CAM_FAR = 460;
 
 // ---------------------------------------------------------------- markers
 
@@ -142,11 +164,12 @@ export const CAM_FAR = 340;
  *  mechanism: standing on the boundary cannot oscillate because entering and
  *  leaving require crossing different lines.
  *
- *  These are angles: at R=10.8 they give a ~1.1-unit trigger and a
- *  ~1.5-unit exit. Adjacent House markers sit 0.15 rad apart (world-layout),
- *  so EXIT must stay below that. */
-export const MARKER_ENTER_ANGLE = 0.1;
-export const MARKER_EXIT_ANGLE = 0.14;
+ *  These are angles: at R=10.8 they give a ~1.1-unit trigger and a ~1.5-unit
+ *  exit. The world currently ships no markers, so nothing consumes these yet;
+ *  they are kept because the interactive set pieces reuse the same proximity
+ *  path. Whatever gets a trigger, keep neighbours further apart than EXIT. */
+export const MARKER_ENTER_ANGLE = 0.07;
+export const MARKER_EXIT_ANGLE = 0.1;
 
 export const COS_ENTER = Math.cos(MARKER_ENTER_ANGLE);
 export const COS_EXIT = Math.cos(MARKER_EXIT_ANGLE);
@@ -156,23 +179,143 @@ export const COS_EXIT = Math.cos(MARKER_EXIT_ANGLE);
  *  factor because marker bodies are now full models, not small primitives. */
 export const SCATTER_CLEARANCE_ANGLE = MARKER_ENTER_ANGLE * 1.8;
 
-/** Scatter instance budgets. Scaled with surface area (R^2) so density stays
- *  constant when the radius is tuned. */
-/** Nearly all scatter lands on the four islands (~20% of the sphere); the
- *  ocean gets only rare rock islets. */
-export const SCATTER_HIGH = 300;
-export const SCATTER_LOW = 110;
+/** Scatter instance budgets.
+ *
+ *  These are counts of PLACED props, not of draw calls: every instance of a
+ *  shape shares one InstancedMesh, so the cost of raising these is vertex
+ *  throughput and one-time placement work, never draw calls.
+ *
+ *  Scaled with surface area (R^2) AND with how much of that surface is land,
+ *  since almost everything lands on an island: the archipelago covers ~41% of
+ *  the sphere against the old four islands' ~29%. */
+export const SCATTER_HIGH = 700;
+export const SCATTER_LOW = 240;
+
+// ---------------------------------------------------------------- water
+
+/**
+ * The ocean surface, as an offset above RADIUS.
+ *
+ * The islands are NOT raised above sea level: without terrain displacement
+ * (deliberately out of scope, see CLAUDE.md) land and sea sit at exactly the
+ * same radius. So the waterline is not a height, it is a COLOUR BOUNDARY: the
+ * water shell fades out across the beach band, which `biome.ts` already paints
+ * as a gradient. The 0.18 offset is only enough to lift the surface to shin
+ * height on a standing character, which is what sells wading.
+ */
+export const WATER_HEIGHT = 0.18;
+
+/** Island weight at which the shoreline sits. Below this you are in the water.
+ *  Chosen mid-beach (biome.ts paints sand across weights 0.06 to 0.5) so there
+ *  is dry sand above the waterline rather than water lapping the grass. */
+export const WATER_EDGE_WEIGHT = 0.22;
+
+/** Wading is slow. Well under half speed reads as effort without making a
+ *  crossing tedious, given a channel is only a few seconds wide. */
+export const SWIM_SPEED_MULT = 0.55;
+
+/** How far the character sinks once in open water, world units. Set against
+ *  CHAR_HALF_HEIGHT 0.42 so the surface cuts around chest height. */
+export const SWIM_SUBMERGE = 0.3;
+
+// -------------------------------------------------------------- trampoline
+
+/**
+ * The trampoline on the jungle island.
+ *
+ * One set of numbers read by three places, for the same reason the ship's are:
+ * `scenery.tsx` builds the frame and the mat from them, `world.tsx` builds the
+ * Platform you stand on from them, and `player.tsx` decides from them whether
+ * you are on it when you land. A mat you can see but not stand on, or bounce
+ * off the empty air beside, is the failure mode.
+ */
+export const TRAMPOLINE_RADIUS = 1.15;
+/** Height of the mat, world units above the surface. Low enough to step onto
+ *  without the ramp reading as a hill. */
+export const TRAMPOLINE_HEIGHT = 0.34;
+/**
+ * Launch speed, world units per second.
+ *
+ * Against JUMP_VELOCITY 4.0 and GRAVITY 6.7 this is an apex of 2.7 units and
+ * 1.8 seconds of hang time, against 1.19 and 1.19 for a normal jump: about
+ * twice as high as you can jump, which is enough to see over the giant
+ * mushrooms. It was 8.5 first, and 5.4 units up put the character in orbit
+ * over a 16-unit planet, so far above the island that the ground read as a map.
+ */
+export const TRAMPOLINE_BOUNCE = 6;
+/** Fraction of impact speed returned when you land on it without pressing
+ *  anything, so a bounce decays over a few hops instead of running forever. */
+export const TRAMPOLINE_RESTITUTION = 0.82;
+/**
+ * How far above the mat E still works, world units.
+ *
+ * Not zero, because the mat throws you back on landing, so a strict "feet on
+ * the ground" rule would leave a window of a frame or two per hop to press
+ * anything in, and the prompt would strobe. Half a unit is about the last
+ * tenth of a second of a hop, which is when a person aiming for the mat
+ * presses the key anyway.
+ *
+ * It cannot be used to climb: the bounce SETS the vertical speed rather than
+ * adding to it, so pressing E again on the way up gains nothing, and the apex
+ * from this height is still well under a unit above a normal one.
+ */
+export const TRAMPOLINE_REACH = 0.5;
+
+// ---------------------------------------------------------------- snowballs
+
+/** How fast a thrown snowball leaves the hand, world units per second. */
+export const SNOWBALL_SPEED = 11;
+/** Upward component of the throw. A flat throw on a sphere this small stays
+ *  level with the horizon and reads as a laser; a lob reads as a throw. */
+export const SNOWBALL_LOFT = 2.4;
+/** How many can be in the air at once. A ring buffer, so the oldest is
+ *  recycled rather than the throw being refused. */
+export const SNOWBALL_POOL = 8;
+
+// ---------------------------------------------------------------- collision
+
+/**
+ * Whether scattered props block the player, or only the authored landmarks do.
+ *
+ * The authored landmarks (windmill, volcano, pavilion...) always collide; this
+ * governs the ~250 trees, boulders, crates and crystals the scatter places.
+ * Ground clutter never collides either way, because that is decided per shape
+ * by `solid` in kits.ts.
+ *
+ * Kept as one switch because it is a taste call, not a technical one: solid
+ * trees make the islands feel like places with substance, and also make them
+ * fiddlier to cross. Load the world with `?colliders` to see every footprint
+ * drawn as a ring before deciding.
+ *
+ * Currently OFF: walking is unobstructed except by the things a visitor would
+ * actually expect to be solid, which keeps the islands pleasant to cross. The
+ * `solid` entries in kits.ts are kept ready for flipping this back.
+ */
+export const COLLIDE_WITH_SCATTER = false;
 
 // ---------------------------------------------------------------- beacons
 
 /** Per-marker beam: an in-island signpost, visible once you are on or near
- *  the island, deliberately not cross-planet. */
-export const MARKER_BEAM_HEIGHT = 3;
+ *  the island, deliberately not cross-planet. A tip at R+3.5 clears the
+ *  horizon from acos(16/19.5) = 0.60 rad. */
+export const MARKER_BEAM_HEIGHT = 3.5;
 
-/** Per-island beacon: the cross-planet navigation tier. A tip at R+8 clears
- *  the horizon from acos(10.8/18.8) = 0.96 rad; four such caps cover the
- *  whole sphere. */
-export const DISTRICT_BEACON_HEIGHT = 8;
+/** Per-island beacon: the cross-planet navigation tier. A tip at R+14 clears
+ *  the horizon from acos(16/30) = 1.01 rad.
+ *
+ *  That is deliberately short of full coverage, and cannot practically be
+ *  otherwise. The old four-island layout was a regular tetrahedron, so the
+ *  largest gap between beacons was exactly half the pairwise separation and
+ *  the height could be tuned to close it precisely. This archipelago is uneven
+ *  on purpose: the furthest any point gets from an island centre is 1.183 rad
+ *  (measured by dense sampling, not estimated), and covering that would need a
+ *  beacon 26 units tall on a 16-unit planet.
+ *
+ *  So there is a stretch of open water with no beacon above the horizon. Left
+ *  that way on purpose. It is not featureless: the ember volcano is ~6.8 units
+ *  tall and so breaks the horizon from 0.80 rad, and the three sea stacks in
+ *  the channels exist precisely to give that water something to steer by. */
+export const DISTRICT_BEACON_HEIGHT = 14;
 
 // ---------------------------------------------------------------- quality
 
@@ -180,9 +323,13 @@ export const DPR_HIGH: [number, number] = [1, 1.75];
 export const DPR_LOW: [number, number] = [1, 1];
 
 /** Icosahedron subdivision. Scales with RADIUS so face size stays roughly
- *  constant; district colour borders resolve across 2-3 face rings. */
-export const SPHERE_DETAIL_HIGH = 13;
-export const SPHERE_DETAIL_LOW = 7;
+ *  constant; shoreline colour bands resolve across 2-3 face rings.
+ *
+ *  Face edge is about 1.0515 * RADIUS / (detail + 1), so holding the old
+ *  0.81-unit face at R=16 needs detail 19 (20 * 20^2 = 8000 triangles). The
+ *  low-power tier holds a 1.53-unit face at detail 10. */
+export const SPHERE_DETAIL_HIGH = 19;
+export const SPHERE_DETAIL_LOW = 10;
 
 /** Guard against tab-switch / GC pauses handing us a multi-second delta,
  *  which would teleport the character across the planet in one frame. */

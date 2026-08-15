@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { probeLowPower } from "@/lib/device";
+import { suspendAudio, unlockAudio } from "@/lib/planet/audio";
 import { clearMovement } from "@/lib/planet/input";
 import { usePlanetStore } from "@/lib/planet/store";
 import { SPAWN } from "@/lib/planet/world-layout";
@@ -43,6 +44,32 @@ export default function PlanetStage({ onClose }: Props) {
 
   useEffect(() => {
     setLowPower(probeLowPower());
+  }, []);
+
+  // Audio lifecycle.
+  //
+  // Mounting this component is downstream of the visitor pressing Enter, which
+  // is the user gesture browsers require before an AudioContext may start, so
+  // this is the one place in the app where unlocking is guaranteed to work.
+  //
+  // On unmount the context is SUSPENDED, never closed. Safari caps live
+  // AudioContexts and this stage is mounted and torn down every time the
+  // planet is opened, so closing and recreating would eventually run out of
+  // them, exactly like the WebGL context leak `hasWebgl2` guards against in
+  // lib/device.ts.
+  useEffect(() => {
+    void unlockAudio();
+
+    const onVisibility = () => {
+      if (document.hidden) suspendAudio();
+      else void unlockAudio();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      suspendAudio();
+    };
   }, []);
 
   const close = useCallback(() => {

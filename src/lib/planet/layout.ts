@@ -51,6 +51,23 @@ function normalize(v: Dir): Dir {
  * to a +Z-derived frame when `centre` is within ~8 degrees of a pole, where
  * "north" stops meaning anything.
  */
+/**
+ * The unit tangent at `from` pointing along the great circle toward `to`.
+ * Undefined when the two are identical or antipodal; returns null there so the
+ * caller can pick its own fallback.
+ */
+export function tangentToward(from: Dir, to: Dir): Dir | null {
+  const dot = from.x * to.x + from.y * to.y + from.z * to.z;
+  const v = {
+    x: to.x - from.x * dot,
+    y: to.y - from.y * dot,
+    z: to.z - from.z * dot,
+  };
+  const l = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+  if (l < 1e-6) return null;
+  return { x: v.x / l, y: v.y / l, z: v.z / l };
+}
+
 export function placeOnSphere(centre: Dir, bearing: number, arc: number): Dir {
   const ref: Dir =
     Math.abs(centre.y) > 0.99 ? { x: 0, y: 0, z: 1 } : { x: 0, y: 1, z: 0 };

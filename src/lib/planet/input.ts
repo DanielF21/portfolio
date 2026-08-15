@@ -57,6 +57,36 @@ const keys = {
   sprint: false,
 };
 
+/**
+ * Which physical keys are down right now, for the on-screen key hints.
+ *
+ * This is `keys` made public, and it is deliberately a separate object rather
+ * than an export of `keys` itself: the axes above are an implementation detail
+ * that `recomputeMove` owns, while this is a read-only presentation snapshot.
+ * The hints overlay polls it from its own rAF loop, so nothing here needs to
+ * notify anyone.
+ *
+ * `jumpAt` is a timestamp, not a boolean, because jump is edge triggered:
+ * `input.jump` is consumed by the render loop within one frame, which is far
+ * too short to see. The overlay decides how long to flash the cap.
+ */
+export const held = {
+  fwd: false,
+  back: false,
+  left: false,
+  right: false,
+  sprint: false,
+  jumpAt: 0,
+};
+
+function syncHeld() {
+  held.fwd = keys.fwd;
+  held.back = keys.back;
+  held.left = keys.left;
+  held.right = keys.right;
+  held.sprint = keys.sprint || stick.sprint;
+}
+
 /** Touch joystick axes, -1..1, plus its own sprint flag. */
 const stick = { x: 0, y: 0, sprint: false };
 
@@ -79,6 +109,7 @@ export function pressInteract() {
 
 export function pressJump() {
   input.jump = true;
+  held.jumpAt = performance.now();
 }
 
 function recomputeMove() {
@@ -88,6 +119,7 @@ function recomputeMove() {
   input.moveX = kx !== 0 ? kx : stick.x;
   input.moveY = ky !== 0 ? ky : stick.y;
   input.sprint = keys.sprint || stick.sprint;
+  syncHeld();
 }
 
 /** Held keys must not drive the character while a modal is open. */
@@ -102,6 +134,8 @@ export function clearMovement() {
   // either latched for whenever it closes.
   input.jump = false;
   input.sprint = false;
+  held.jumpAt = 0;
+  syncHeld();
 }
 
 // `event.code` is physical-position based, so this works on AZERTY and Dvorak
@@ -133,8 +167,10 @@ function onKeyDown(e: KeyboardEvent) {
   else if (RIGHT.has(c)) keys.right = true;
   else if (SPRINT.has(c)) keys.sprint = true;
   else if (INTERACT.has(c)) input.interact = true;
-  else if (JUMP.has(c)) input.jump = true;
-  else return;
+  else if (JUMP.has(c)) {
+    input.jump = true;
+    held.jumpAt = performance.now();
+  } else return;
   recomputeMove();
 }
 

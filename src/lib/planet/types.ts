@@ -47,9 +47,15 @@ export type MarkerContent =
 
 export type MarkerKind = MarkerContent["kind"];
 
-/** The four authored regions of the planet. Everything outside them is
- *  "wilds": inert scenery with no markers. */
-export type DistrictId = "house" | "machine" | "bio" | "gallery";
+/** The authored islands of the planet. Everything outside them is "wilds":
+ *  open ocean with the occasional rock islet.
+ *
+ *  `shore` is the continent the player spawns on and is roughly twice the
+ *  radius of the others; the remaining four are smaller islands, each its own
+ *  climate. Names describe the place, not the content: this world carries no
+ *  portfolio material, so the old house/machine/bio/gallery naming (which came
+ *  from what each region used to advertise) no longer meant anything. */
+export type DistrictId = "shore" | "ember" | "frost" | "dune" | "verdant";
 
 /** Which prop kit dresses a patch of ground. The wilds have scenery but no
  *  district, hence the extra member. */
@@ -72,9 +78,14 @@ export interface PlanetMarker {
   readonly content: MarkerContent;
 }
 
-/** Where the character starts, as a unit vector. */
+/** Where the character starts, as a unit vector, and optionally which way it
+ *  looks. Without `facing` the player derives an arbitrary tangent from a
+ *  cross product, which means the opening shot points wherever the maths
+ *  happened to land rather than at anything worth seeing. */
 export interface SpawnPoint {
   readonly x: number;
   readonly y: number;
   readonly z: number;
+  /** Unit vector, tangent to the surface at (x, y, z). */
+  readonly facing?: { readonly x: number; readonly y: number; readonly z: number };
 }

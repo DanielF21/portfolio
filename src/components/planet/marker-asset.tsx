@@ -14,6 +14,8 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { ASSETS } from "@/lib/planet/asset-manifest";
 
+import { fixGltfMaterials } from "./gltf-fixup";
+
 /**
  * The 3D body of a marker: a GLTF model when the manifest has a URL, a
  * procedural primitive assembly otherwise (or when the fetch fails).
@@ -35,11 +37,12 @@ export interface FadeEntry {
 
 export type MatsRef = React.MutableRefObject<FadeEntry[]>;
 
-// Kick off every fetch the moment the lazy chunk executes, in parallel with
-// the rest of the scene setup.
-for (const def of Object.values(ASSETS)) {
-  if (def.url) useGLTF.preload(def.url);
-}
+// NOTE: no module-scope preload here. This file is imported by scenery.tsx
+// (for AssetErrorBoundary), so a `for (const def of Object.values(ASSETS))`
+// preload loop would run on every entry and fetch all ~740KB of models,
+// including the dozen that exist only for markers the world no longer ships.
+// Scenery preloads what scenery uses; a mounted marker body fetches its own
+// model through the useGLTF suspension below.
 
 interface BodyProps {
   assetId: string;
@@ -68,6 +71,10 @@ function GltfBody({
     const g = group.current;
     if (!g) return;
 
+    // Same repairs as scenery: metallicFactor default and near-black base
+    // colours both render as holes in a scene with no environment map.
+    fixGltfMaterials(g);
+
     const entries: FadeEntry[] = [];
     let meshes = 0;
     g.traverse((o) => {
@@ -77,15 +84,6 @@ function GltfBody({
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const m of mats) {
         const std = m as THREE.MeshStandardMaterial;
-        // glTF defaults metallicFactor to 1 when omitted, and several Kenney
-        // exports rely on that default. Fully metallic surfaces render black
-        // under punctual lights with no environment map, so clamp.
-        if (typeof std.metalness === "number" && std.metalness > 0.25) {
-          std.metalness = 0.25;
-          if (typeof std.roughness === "number" && std.roughness < 0.5) {
-            std.roughness = 0.5;
-          }
-        }
         if (std.color) {
           entries.push({ mat: std, live: std.color.clone(), emissive: false });
         }

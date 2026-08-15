@@ -14,11 +14,11 @@ import { usePlanetStore } from "@/lib/planet/store";
 /**
  * A shaft of light rising from an unvisited marker.
  *
- * Navigation on the district planet is two-tier: tall district beacons (see
+ * Navigation on the island planet is two-tier: tall district beacons (see
  * `scenery.tsx`) are the cross-planet signal, and these short per-marker beams
- * are in-district signposts. A tip at R + 3.5 clears the horizon from
- * acos(14.4/17.9) = 0.63 rad away, which is a bit beyond the district falloff:
- * exactly the "you have arrived, here are the things" range.
+ * are in-island signposts. At R = 10.8 a tip at R + 3 clears the horizon from
+ * acos(10.8/13.8) = 0.67 rad away, a little beyond the island falloff: exactly
+ * the "you have arrived, here are the things" range.
  */
 
 const BASE_RADIUS = 0.085;

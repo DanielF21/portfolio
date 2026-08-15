@@ -6,16 +6,17 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 
 import { biomeColor } from "@/lib/planet/biome";
 import {
+  COLLIDE_WITH_SCATTER,
   RADIUS,
   SCATTER_CLEARANCE_ANGLE,
-  SCATTER_HIGH,
-  SCATTER_LOW,
 } from "@/lib/planet/config";
-import { dominantDistrict } from "@/lib/planet/districts";
+import { DISTRICT_BY_ID, dominantDistrict } from "@/lib/planet/districts";
 import { KITS, type KitLayer, type PropShapeId } from "@/lib/planet/kits";
 import { fibonacciSphere } from "@/lib/planet/layout";
 import { resolveSceneryDir, SCENERY, SPAWN } from "@/lib/planet/world-layout";
 import type { PlanetMarker } from "@/lib/planet/types";
+
+import { angularRadius, makeCollider, type Collider } from "./colliders";
 
 /**
  * District-driven prop scatter.
@@ -205,11 +206,20 @@ function pickLayer(layers: readonly KitLayer[], r: number): KitLayer {
   return layers[layers.length - 1];
 }
 
-function buildPlacement(
+export interface Placement {
+  readonly shapes: Map<PropShapeId, ShapeInstances>;
+  /** Colliders for whichever placed props declared a `solid` footprint. Built
+   *  here rather than in a second pass because this is the only place the
+   *  per-instance direction and scale exist. */
+  readonly colliders: Collider[];
+}
+
+export function buildPlacement(
   markers: readonly PlanetMarker[],
   count: number
-): Map<PropShapeId, ShapeInstances> {
+): Placement {
   const out = new Map<PropShapeId, ShapeInstances>();
+  const colliders: Collider[] = [];
 
   // Keep-out zones: every marker, every authored scenery footprint, plus the
   // spawn point and the first few steps of the spawn-to-House sightline so
@@ -219,19 +229,23 @@ function buildPlacement(
     dir: resolveSceneryDir(item),
     cos: Math.cos(item.clearAngle),
   }));
-  blockers.push({ dir: { ...SPAWN }, cos: Math.cos(0.18) });
+  blockers.push({ dir: { ...SPAWN }, cos: Math.cos(0.13) });
   blockers.push({
-    // Midpoint of spawn -> house-centre (0, 0.0995, 0.995), normalized.
+    // The first few steps of the spawn-to-continent-centre sightline, so the
+    // opening view is open ground rather than the back of a tree. Derived from
+    // the continent's centre rather than a literal vector, so it follows if
+    // the archipelago is re-laid-out.
     dir: (() => {
+      const c = DISTRICT_BY_ID.shore.centre;
       const v = {
-        x: SPAWN.x / 2,
-        y: (SPAWN.y + 0.0995) / 2,
-        z: (SPAWN.z + 0.995) / 2,
+        x: (SPAWN.x + c.x) / 2,
+        y: (SPAWN.y + c.y) / 2,
+        z: (SPAWN.z + c.z) / 2,
       };
       const l = Math.hypot(v.x, v.y, v.z);
       return { x: v.x / l, y: v.y / l, z: v.z / l };
     })(),
-    cos: Math.cos(0.16),
+    cos: Math.cos(0.12),
   });
 
   const dirs = fibonacciSphere(Math.round(count * 1.7), 0.31);
@@ -306,26 +320,31 @@ function buildPlacement(
       const fixed = layer.tint[Math.floor(hash(i, 8) * layer.tint.length) % layer.tint.length];
       bucket.colors.push(new THREE.Color(fixed[0], fixed[1], fixed[2]));
     }
+
+    if (layer.solid && COLLIDE_WITH_SCATTER) {
+      const [r, h] = layer.solid;
+      colliders.push(makeCollider(dir, angularRadius(r * s), h * s));
+    }
+
     placed++;
   }
 
-  return out;
+  return { shapes: out, colliders };
 }
 
 // ---------------------------------------------------------------- component
 
 interface Props {
-  markers: readonly PlanetMarker[];
-  lowPower: boolean;
+  /** Built once by <World> and shared with the collider registry, so the props
+   *  you can see and the props you cannot walk through are guaranteed to be
+   *  the same set. */
+  placement: Placement;
 }
 
-export function Scatter({ markers, lowPower }: Props) {
+export function Scatter({ placement }: Props) {
   const meshes = useMemo(() => {
-    const count = lowPower ? SCATTER_LOW : SCATTER_HIGH;
-    const placement = buildPlacement(markers, count);
-
     const built: THREE.InstancedMesh[] = [];
-    placement.forEach((inst, shapeId) => {
+    placement.shapes.forEach((inst, shapeId) => {
       const def = SHAPES[shapeId];
       const geometry = def.build();
       const material = new THREE.MeshStandardMaterial({
@@ -347,7 +366,7 @@ export function Scatter({ markers, lowPower }: Props) {
       built.push(mesh);
     });
     return built;
-  }, [markers, lowPower]);
+  }, [placement]);
 
   useEffect(
     () => () => {
