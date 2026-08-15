@@ -27,6 +27,17 @@ interface Props {
   spawn: SpawnPoint;
   lowPower: boolean;
   onContextLost: () => void;
+  /**
+   * Whether this instance owns the user's input.
+   *
+   * THIS IS A CORRECTNESS SWITCH, NOT A FEATURE FLAG. `attachKeyboard` binds
+   * handlers to `window` and calls `preventDefault()` on the arrow keys and
+   * Space (see SCROLLERS in lib/planet/input.ts). Mounting a Scene with
+   * `interactive` left on inside a page tile would therefore stop the arrow
+   * keys and the space bar from scrolling the whole page, silently, for as
+   * long as the tile is mounted. Ambient previews MUST pass false.
+   */
+  interactive?: boolean;
 }
 
 export default function Scene({
@@ -34,18 +45,54 @@ export default function Scene({
   spawn,
   lowPower,
   onContextLost,
+  interactive = true,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!interactive) return;
     const release = attachKeyboard();
     return release;
-  }, []);
+  }, [interactive]);
 
   useEffect(() => {
+    if (!interactive) return;
     const el = hostRef.current;
     if (!el) return;
     return attachDrag(el);
+  }, [interactive]);
+
+  // Make react-three-fiber re-measure until it actually has a size.
+  //
+  // R3F sizes its canvas from a ResizeObserver on the container and only builds
+  // the renderer once it sees a non-zero size. When the Canvas mounts inside a
+  // portal appended in the same commit, it can measure zero and then never see
+  // a size CHANGE, because the container was correctly sized in layout the
+  // whole time. The symptom is brutal to diagnose: a canvas stuck at the HTML
+  // default 300x150, no render loop, no error of any kind, and a loading pill
+  // sitting at 0% forever.
+  //
+  // A single nudge is not enough, because the Canvas may not have been created
+  // yet when it fires. So poll briefly and stop the moment the canvas has taken
+  // the host's width, or after a short ceiling. Every dispatch is idempotent
+  // and free when the size was already correct.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const deadline = performance.now() + 3000;
+
+    const nudge = () => {
+      const canvas = host.querySelector("canvas");
+      const sized = canvas && canvas.clientWidth >= host.clientWidth - 2;
+      if (sized || performance.now() > deadline) return;
+      window.dispatchEvent(new Event("resize"));
+      timer = setTimeout(nudge, 120);
+    };
+
+    timer = setTimeout(nudge, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   // sceneReady is NOT set here. It flips inside <World> only after all asset
@@ -56,7 +103,13 @@ export default function Scene({
     <div
       ref={hostRef}
       className="absolute inset-0 touch-none select-none"
-      style={{ cursor: "grab" }}
+      style={{
+        cursor: interactive ? "grab" : "default",
+        // A non-interactive scene is decoration: it must not swallow clicks
+        // meant for the link wrapping the tile.
+        pointerEvents: interactive ? undefined : "none",
+      }}
+      aria-hidden={!interactive}
     >
       <Canvas
         dpr={lowPower ? DPR_LOW : DPR_HIGH}

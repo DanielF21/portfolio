@@ -30,9 +30,39 @@
 
       --border: 0 0% 89.8%;
       --input: 0 0% 89.8%;
-      --ring: 0 0% 3.9%;
+      /* Points at the brand rather than near-black, so focus rings inherit the
+       * site's personality for free. */
+      --ring: var(--brand);
 
-      --radius: 0.5rem;
+      --radius: 0.875rem;
+
+      /* ------------------------------------------------------------- brand */
+      --brand: 18 92% 52%;
+      --brand-foreground: 0 0% 100%;
+
+      /* ------------------------------------------------------- the hue set
+       *
+       * Every "thing" picks one of these and never a free hex value. The whole
+       * point is that they sit in one narrow lightness and saturation band, so
+       * at thirty items the index reads as a designed spectrum rather than a
+       * paint spill. If you add a hue, match the band: L around 52-58%,
+       * S around 78-92%.
+       *
+       * Colour is allowed in exactly four places: the dot on an index row, the
+       * featured tile's edge, a row's hover state, and the live indicator.
+       * Never as a fill behind text, never as a gradient. */
+      --hue-amber: 38 92% 50%;
+      --hue-orange: 18 92% 52%;
+      --hue-rose: 350 85% 58%;
+      --hue-magenta: 322 80% 56%;
+      --hue-violet: 265 80% 62%;
+      --hue-indigo: 234 84% 60%;
+      --hue-blue: 212 90% 52%;
+      --hue-cyan: 192 85% 45%;
+      --hue-teal: 172 78% 40%;
+      --hue-green: 145 70% 42%;
+      --hue-lime: 88 68% 44%;
+      --hue-slate: 215 25% 46%;
     }
 
     .dark {
@@ -62,7 +92,25 @@
 
       --border: 0 0% 14.9%;
       --input: 0 0% 14.9%;
-      --ring: 0 0% 83.1%;
+      --ring: var(--brand);
+
+      /* Lifted lightness across the board. The light-mode band sits too dark
+       * against a near-black background to hold its chroma. */
+      --brand: 18 95% 62%;
+      --brand-foreground: 0 0% 8%;
+
+      --hue-amber: 38 95% 60%;
+      --hue-orange: 18 95% 62%;
+      --hue-rose: 350 90% 68%;
+      --hue-magenta: 322 85% 66%;
+      --hue-violet: 265 88% 72%;
+      --hue-indigo: 234 90% 70%;
+      --hue-blue: 212 95% 62%;
+      --hue-cyan: 192 88% 55%;
+      --hue-teal: 172 80% 50%;
+      --hue-green: 145 72% 52%;
+      --hue-lime: 88 70% 54%;
+      --hue-slate: 215 28% 62%;
     }
   }
 
@@ -72,6 +120,76 @@
     }
     body {
       @apply bg-background text-foreground;
+    }
+  }
+
+  /* ------------------------------------------------------------------ reveal
+   *
+   * Entrance animation for content.
+   *
+   * THE INVARIANT: no stylesheet rule and no inline style may ever set
+   * `opacity: 0` on content. Zero opacity exists only inside the @keyframes
+   * block below.
+   *
+   * This replaces a framer-motion wrapper that rendered every element at
+   * `opacity: 0` and raised it from a requestAnimationFrame callback after
+   * hydration. That shipped 29 invisible blocks in the server HTML, so the
+   * whole page was blank until JS ran, and stayed blank forever if it did not.
+   *
+   * A CSS animation is driven by the style engine rather than by userland rAF
+   * scheduling, so a busy or throttled main thread delays frames but can never
+   * prevent the final state. With JS disabled it still runs. If this stylesheet
+   * itself fails to load, the content is unstyled but VISIBLE, which is the
+   * correct way for this to break. */
+  @layer components {
+    .reveal {
+      /* `backwards`, NOT `both`, and the difference is load bearing.
+       *
+       * `both` retains the final keyframe forever, so the element keeps a
+       * computed `transform: matrix(1, 0, 0, 1, 0, 0)` after the animation
+       * ends. That is the identity matrix, but per spec ANY transform other
+       * than the `none` keyword makes the element a containing block for
+       * `position: fixed` descendants. Anything fixed inside a revealed
+       * element then positions against it instead of the viewport. It broke
+       * the chess drag preview, which rendered several squares away from the
+       * cursor.
+       *
+       * `backwards` still applies the first keyframe through the delay, which
+       * is the whole point of the stagger, and then hands the element back to
+       * its own styles, where transform really is `none`. */
+      animation: reveal 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+      animation-delay: var(--reveal-delay, 0ms);
+    }
+  }
+
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Respect the OS setting. Near-zero rather than `none` so animations still
+   * fire their end state and any `animationend` listener still runs.
+   *
+   * The negative delay matters and is not decoration. `.reveal` fills
+   * `backwards`, which holds the `from` keyframe (opacity 0) for the whole of
+   * `animation-delay`. Zeroing only the duration would leave a reduced-motion
+   * visitor staring at blank space for the length of the stagger. A negative
+   * delay starts every animation already past its end. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: -1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 

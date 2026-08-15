@@ -1,0 +1,19 @@
+/**
+ * Site identity. Everything that is true about the site rather than about a
+ * thing, a role, or a post.
+ *
+ * This is what is left of the old `resume.tsx`, which had grown into a single
+ * object holding identity, nav, socials, skills, education, and ten projects,
+ * half of which nothing rendered. The rest of it now lives in `work.ts` and
+ * `things.ts`.
+ */
+export const SITE = {
+  name: "Daniel Fleming",
+  initials: "DF",
+  url: "https://danielfleming.xyz",
+  description: "Engineer in Boston. I build interactive things.",
+  socials: [
+    { name: "GitHub", url: "https://github.com/DanielF21/" },
+    { name: "LinkedIn", url: "https://www.linkedin.com/in/dannof/" },
+  ],
+} as const;

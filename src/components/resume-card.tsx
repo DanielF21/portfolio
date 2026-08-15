@@ -38,12 +38,18 @@ export const ResumeCard = ({
     }
   };
 
+  // Only leave the site in a new tab. This was unconditional, which happened to
+  // be harmless while every caller passed an external school URL, but would
+  // have opened an internal route in a new tab the moment one did not.
+  const isExternal = /^https?:\/\//.test(href ?? "");
+
   return (
     <Link
       href={href || "#"}
       className="block cursor-pointer"
       onClick={handleClick}
-      target = "_blank"
+      target={isExternal ? "_blank" : undefined}
+      rel={isExternal ? "noopener noreferrer" : undefined}
     >
       <Card className="flex">
         <div className="flex-none">
