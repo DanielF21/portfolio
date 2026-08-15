@@ -4,22 +4,36 @@ import Link from "next/link";
 import { Container } from "@/components/layout/container";
 import { LiveBudgetProvider } from "@/components/things/live-budget-provider";
 import { FeaturedThing, ThingRow } from "@/components/things/thing-tile";
-import { getWriting } from "@/data/mdx";
+import { SeriesCard } from "@/components/writing/series-card";
 import { SITE } from "@/data/site";
 import { featuredThing, restOfThings } from "@/data/things";
+import { allSeries, oneOffs } from "@/data/writing";
 import { revealDelay } from "@/lib/utils";
 
 /**
- * Home: a short statement, the newest thing at full size, then everything else
- * as compact rows.
+ * Home: a short statement, the writing, then the things.
+ *
+ * Writing sits above Things now, and the newest series gets a card at full size
+ * rather than three loose rows at the bottom of the page. The two sections are
+ * deliberately in different registers: a series is one body of work with an
+ * order, so it shows its parts; the toys are individually interesting, so they
+ * show pictures.
  *
  * Server component. The only client code on this page is the preview layer
- * inside each tile, which is lazy and only wakes on demand.
+ * inside each thing tile, which is lazy and only wakes on demand.
  */
 export default async function Page() {
   const featured = featuredThing();
   const rest = restOfThings();
-  const writing = await getWriting();
+  const [series, singles] = await Promise.all([allSeries(), oneOffs()]);
+
+  const featuredSeries = series.find((s) => s.parts.length > 0);
+
+  // Things to read, not rows in an index. Counting index entries would say
+  // "all 1" next to a card that visibly lists two parts. Supporting documents
+  // are left out: they are reference material the parts link into.
+  const writingCount =
+    singles.length + series.reduce((n, s) => n + s.parts.length, 0);
 
   return (
     <LiveBudgetProvider>
@@ -54,6 +68,52 @@ export default async function Page() {
           </ul>
         </header>
 
+        {writingCount > 0 && (
+          <section aria-labelledby="writing-heading" className="flex flex-col gap-6">
+            <div className="flex items-baseline justify-between gap-4">
+              <h2
+                id="writing-heading"
+                className="font-mono text-meta uppercase tracking-widest text-muted-foreground"
+              >
+                Writing
+              </h2>
+              <Link
+                href="/writing"
+                className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
+              >
+                all {writingCount} &rarr;
+              </Link>
+            </div>
+
+            {featuredSeries && (
+              <div className="reveal" style={revealDelay(2)}>
+                <SeriesCard {...featuredSeries} />
+              </div>
+            )}
+
+            {singles.length > 0 && (
+              <div className="reveal -mx-3 flex flex-col" style={revealDelay(3)}>
+                {singles.slice(0, 3).map((doc) => (
+                  <Link
+                    key={doc.slug}
+                    href={`/writing/${doc.slug}`}
+                    className="flex flex-col gap-0.5 rounded-xl px-3 py-3 transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
+                  >
+                    <span className="font-display text-title font-bold">
+                      {doc.metadata.title}
+                    </span>
+                    {doc.metadata.summary && (
+                      <span className="text-body text-muted-foreground">
+                        {doc.metadata.summary}
+                      </span>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         <section aria-labelledby="things-heading" className="flex flex-col gap-6">
           <div className="flex items-baseline justify-between gap-4">
             <h2
@@ -71,56 +131,19 @@ export default async function Page() {
           </div>
 
           {featured && (
-            <div className="reveal" style={revealDelay(2)}>
+            <div className="reveal" style={revealDelay(4)}>
               <FeaturedThing thing={featured} />
             </div>
           )}
 
           {rest.length > 0 && (
-            <div className="reveal -mx-3 flex flex-col" style={revealDelay(3)}>
+            <div className="reveal -mx-3 flex flex-col" style={revealDelay(5)}>
               {rest.map((thing) => (
                 <ThingRow key={thing.slug} thing={thing} />
               ))}
             </div>
           )}
         </section>
-
-        {writing.length > 0 && (
-          <section aria-labelledby="writing-heading" className="flex flex-col gap-4">
-            <div className="flex items-baseline justify-between gap-4">
-              <h2
-                id="writing-heading"
-                className="font-mono text-meta uppercase tracking-widest text-muted-foreground"
-              >
-                Writing
-              </h2>
-              <Link
-                href="/writing"
-                className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
-              >
-                all {writing.length} &rarr;
-              </Link>
-            </div>
-            <div className="flex flex-col">
-              {writing.slice(0, 3).map((doc) => (
-                <Link
-                  key={doc.slug}
-                  href={`/writing/${doc.slug}`}
-                  className="-mx-3 flex flex-col gap-0.5 rounded-xl px-3 py-3 transition-colors hover:bg-muted/60"
-                >
-                  <span className="font-display text-title font-bold">
-                    {doc.metadata.title}
-                  </span>
-                  {doc.metadata.summary && (
-                    <span className="text-body text-muted-foreground">
-                      {doc.metadata.summary}
-                    </span>
-                  )}
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
       </Container>
     </LiveBudgetProvider>
   );

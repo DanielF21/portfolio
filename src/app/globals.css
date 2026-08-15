@@ -205,8 +205,18 @@
     @apply px-4
   }
 
+  /* `!leading-loose` is scoped to `pre code`, NOT to bare `code`.
+   *
+   * Applied to every code element it also hits INLINE code, and the benchmark
+   * tables in /writing carry inline code in their cells. A loose line height on
+   * a `use_cache=False` inside a table row pushes that row visibly taller than
+   * the ones around it, so a table of measurements stops lining up. */
+  pre code {
+    @apply !leading-loose;
+  }
+
   code {
-    @apply text-sm md:text-base !leading-loose;
+    @apply text-sm md:text-base;
   }
   
   pre > code {
@@ -219,14 +229,31 @@
     background-color: var(--shiki-light-bg);
   }
    
-  @media (prefers-color-scheme: dark) {
-    code[data-theme*=" "],
-    code[data-theme*=" "] span {
-      color: var(--shiki-dark);
-      background-color: var(--shiki-dark-bg);
-    }
+  /* Shiki emits BOTH palettes as custom properties and the stylesheet chooses
+   * one. It has to choose on the same signal the rest of the site uses.
+   *
+   * This was a `prefers-color-scheme` media query, but the site is class
+   * themed: `darkMode: ["class"]` in tailwind.config.ts, and ThemeProvider
+   * runs with attribute="class". On a machine set to light at the OS level
+   * with the site toggled to dark, the query never matched, so every code
+   * block kept the light palette: near-black text on the near-black page. The
+   * toggle appeared to do nothing to code. */
+  .dark code[data-theme*=" "],
+  .dark code[data-theme*=" "] span {
+    color: var(--shiki-dark);
+    background-color: var(--shiki-dark-bg);
   }
   
+  /* Line numbers are OPT IN, via `[data-line-numbers]` on the fence.
+   *
+   * An unscoped `code > [data-line]::before` used to sit below these rules and
+   * numbered every block on the site. Most fenced blocks in /writing are
+   * arithmetic rather than code
+   *
+   *     2 x 2 x 28 x 2 x 128 = 28,672 bytes = 28 KiB / token
+   *
+   * and a numbered gutter on one line of arithmetic reads as a code listing
+   * that has lost the rest of itself. */
   code[data-line-numbers] {
     counter-reset: line;
   }
@@ -237,26 +264,73 @@
     @apply inline-block w-4 mr-4 text-right text-gray-500;
   }
  
-  code {
-    counter-reset: line;
-  }
- 
-  code > [data-line]::before {
-  counter-increment: line;
-  content: counter(line);
- 
-  /* Other styling */
-  display: inline-block;
-  width: 1rem;
-  margin-right: 2rem;
-  text-align: right;
-  color: gray;
-}
- 
 code[data-line-numbers-max-digits="2"] > [data-line]::before {
   width: 2rem;
 }
  
 code[data-line-numbers-max-digits="3"] > [data-line]::before {
   width: 3rem;
+}
+
+/* Code blocks sit on the site's own surface, not typography's.
+ *
+ * `keepBackground: false` tells rehype-pretty-code NOT to paint the Shiki
+ * theme's background, which leaves @tailwindcss/typography's
+ * `--tw-prose-pre-bg` showing through. That default is dark in BOTH themes,
+ * while the min-light palette supplies dark text, so every code block in light
+ * mode was dark grey text on a near-black slab.
+ *
+ * `bg-muted` flips with the theme the same way the foreground tokens do, so
+ * both palettes land on a surface with contrast under them. */
+.prose pre {
+  @apply bg-muted;
+}
+
+/* An unhighlighted block keeps typography's `--tw-prose-pre-code`, a pale grey
+ * chosen to sit on that dark slab, so on a light surface it is nearly
+ * invisible. This is not an edge case: rehype-pretty-code only highlights a
+ * fence that declares a language, and none of the fenced blocks in the writing
+ * do, because they hold arithmetic and directory trees rather than code.
+ *
+ * Scoped with :not([data-theme]) so a block that IS highlighted keeps its Shiki
+ * token colours. */
+.prose pre code:not([data-theme]) {
+  @apply text-foreground;
+}
+
+/* @tailwindcss/typography decorates inline code with literal backticks, via
+ * `code::before { content: "\`" }`. In prose that names an identifier every
+ * other sentence (`use_cache=False`, `logits_to_keep=1`, `DecodeTrace.mark()`)
+ * that is a pair of stray glyphs per mention, and the mono face already says
+ * "this is code" on its own. */
+.prose code::before,
+.prose code::after {
+  content: none;
+}
+
+/* -------------------------------------------------------------- wide tables
+ *
+ * The results tables in /writing run to eight columns and do not fit the 44rem
+ * prose column. `wrapTables` in src/data/mdx.ts puts each table inside one of
+ * these, and the scroll lives on the WRAPPER rather than on the table.
+ *
+ * `display: block; overflow-x: auto` applied to the <table> itself is the
+ * usual shortcut and it is wrong here. A table that is display:block stops
+ * being a table for layout, so its columns no longer size to their contents
+ * and all of them come out equal width. Columns of measurements stop lining
+ * up, which is the whole reason the table exists. */
+.prose .table-scroll {
+  @apply my-6 overflow-x-auto;
+}
+
+.prose .table-scroll > table {
+  @apply my-0 w-max min-w-full;
+}
+
+/* Mono, and never wrapped. These are columns of numbers: proportional digits
+ * leave a column of 45.66 / 45.22 / 35.08 visibly ragged, and one wrapped cell
+ * makes its row twice the height of the rows around it. The wrapper scrolls
+ * instead, which is what it is for. */
+.prose .table-scroll :is(th, td) {
+  @apply whitespace-nowrap font-mono text-meta;
 }

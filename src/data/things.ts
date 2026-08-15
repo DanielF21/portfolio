@@ -17,22 +17,12 @@
  * Pure data, no JSX, so this is importable from server components.
  */
 
-/** The fixed hue set from globals.css. A thing picks one of these and never a
- *  free colour value: they all sit in one narrow lightness and saturation band
- *  so that at thirty items the index reads as a designed spectrum. */
-export type Hue =
-  | "amber"
-  | "orange"
-  | "rose"
-  | "magenta"
-  | "violet"
-  | "indigo"
-  | "blue"
-  | "cyan"
-  | "teal"
-  | "green"
-  | "lime"
-  | "slate";
+/** The hue set moved to `hues.ts` when writing series started picking from it
+ *  too. Re-exported here so every existing `from "@/data/things"` import of
+ *  `Hue` or `hueStyle` keeps working. */
+export { hueStyle, type Hue } from "@/data/hues";
+
+import type { Hue } from "@/data/hues";
 
 export interface Poster {
   readonly src: string;
@@ -152,10 +142,4 @@ export function restOfThings(): Thing[] {
 
 export function thingBySlug(slug: string): Thing | undefined {
   return THINGS.find((t) => t.slug === slug);
-}
-
-/** Inline style that publishes a thing's hue to its subtree. Everything inside
- *  reads it via the `thing` colour in tailwind.config.ts. */
-export function hueStyle(hue: Hue): React.CSSProperties {
-  return { "--thing": `var(--hue-${hue})` } as React.CSSProperties;
 }

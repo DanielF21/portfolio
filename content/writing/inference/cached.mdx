@@ -1,0 +1,196 @@
+---
+title: "cached: preallocated KV cache"
+publishedAt: "2026-08-10"
+series: "inference"
+part: 2
+summary: "One variable changed against naive. Throughput goes flat across prompt length and the bottleneck moves to host overhead."
+result: "Flat at ~45.8 tok/s across a 256x prompt range"
+code: "https://github.com/DanielF21/inference/tree/main/infer/engines/cached"
+---
+
+One variable changed against naive. `use_cache=True` with a handwritten
+`CacheLayerMixin` subclass holding a preallocated `[B, n_kv_heads, max_len,
+head_dim]` buffer per layer, and decode feeds a single token instead of the
+whole sequence. Same model, same sampling, same hardware, same prompts.
+
+**Setup:** Qwen2.5-1.5B fp16, NVIDIA A10 (Modal), greedy, seed 0, 256 new
+tokens, 5 recorded runs + 2 warmup per prompt.
+
+## Results
+
+| prompt | ptok | ttft | total | decode tok/s | itl p95 | per-step | peak mem |
+|---|---|---|---|---|---|---|---|
+| p16 | 16 | 0.034s | 5.821s | 44.05 | 24.0 ms | 22.7 ms | 2.89 GiB |
+| p64 | 64 | 0.027s | 5.606s | 45.70 | 22.3 ms | 21.9 ms | 2.90 GiB |
+| p256 | 256 | 0.025s | 5.543s | 46.21 | 23.0 ms | 21.7 ms | 2.91 GiB |
+| p1024 | 1024 | 0.055s | 5.639s | 45.67 | 22.4 ms | 22.0 ms | 2.98 GiB |
+| p4096 | 4096 | 0.248s | 5.815s | 45.80 | 22.3 ms | 22.7 ms | 3.25 GiB |
+
+`total` is the mean wall clock per run. `per step` is `total / 256`.
+
+`analyze.py --parity naive cached` reports the same 256 token ids for all five
+prompts. This is identity of tokens under greedy argmax and does not imply the
+logits are identical. Attention runs at `n x n` in naive and `1 x n` in cached,
+so the logits almost certainly differ slightly.
+
+Run to run spread is larger than naive's. The five p4096 runs span 5.783 to
+5.841 s, about 1.0%. Naive's spread at the same prompt was 0.08%. Naive ran for
+71 seconds per run and cached for 5.8 seconds, so the same absolute jitter is a
+larger fraction of the cached total.
+
+## Throughput is flat across prompt length
+
+| prompt | naive | cached | speedup |
+|---|---|---|---|
+| p16 | 45.66 | 44.05 | 0.96x |
+| p64 | 45.22 | 45.70 | 1.01x |
+| p256 | 35.08 | 46.21 | 1.32x |
+| p1024 | 13.69 | 45.67 | 3.34x |
+| p4096 | 3.60 | 45.80 | 12.73x |
+
+Decode throughput varies from 44.05 to 46.21 tok/s across a 256x range of
+prompt lengths, a spread of 5%. Naive fell 12.7x over the same range.
+
+The 12.73x speedup at p4096 comes entirely from naive's degradation. Cached
+runs at 45.80 tok/s at p4096 and 44.05 tok/s at p16, so it gains nothing from
+the longer context.
+
+**p16 is a net regression at 0.96x.** The cache costs more than it saves when
+the prompt is short. Break even prompt size is at ~64 tokens.
+
+## Why the floor moved
+
+The 19.32 ms floor was measured on a forward pass with `use_cache=False` and
+no cache object attached. This engine runs a different code path. Each forward
+now also does 28 `CacheLayerMixin.update()` calls, `Cache` container dispatch
+per layer, one `get_seq_length()` to offset RoPE, and one `get_mask_sizes()`
+feeding mask construction. Roughly 2 to 3 ms of host work that the floor
+measurement never included.
+
+A floor measured on one engine does not predict the next one when the next one
+adds host work to the same path.
+
+## MFU
+
+| P | naive MFU | naive MBU | cached MFU | cached MBU |
+|---|---|---|---|---|
+| 16 | 13.8% | 23.5% | 0.1% | 22.7% |
+| 64 | 18.3% | 23.3% | 0.1% | 23.6% |
+| 256 | 28.6% | 18.1% | 0.2% | 23.9% |
+| 1024 | 34.3% | 7.0% | 0.5% | 23.8% |
+| 4096 | 36.3% | 1.9% | 1.8% | 24.5% |
+
+The two engines move in opposite directions on the roofline as context grows.
+Naive's MFU rises from 13.8% to 36.3% while its MBU falls from 23.5% to 1.9%.
+Cached's MFU stays under 2% at every prompt length while its MBU holds between
+22.7% and 24.5%. The README's claim that prefill is compute bound and decode
+bandwidth bound now has measured numbers behind it.
+
+Cached MFU collapses to 1.8% at p4096 while throughput rises 12.7x, because
+the engine deletes 244x of the FLOPs and MFU rewards doing work:
+
+```
+naive p4096   3226.6 TF
+cached p4096    13.2 TF      ratio 244x
+```
+
+That ratio matches the 248x token forward ratio the naive analysis derived from
+architecture alone. Naive's 36.3% MFU consisted almost entirely of recomputing
+values that could not change.
+
+Bandwidth is the meaningful number for decode. Cached moves about 3.1 GB per
+decode step, weights read once plus the cache, against 600 GB/s. That is 5.2 ms
+of traffic occupying a 22 ms step. **The remaining 76% is host overhead.**
+
+At p16 the two engines have nearly identical MBU, 23.5% and 22.7%. Both are
+host bound at that prompt length and move the same weights, which is why the
+speedup there is 0.96x.
+
+FLOP and byte accounting is computed by `scripts/roofline.py`. Its `--check`
+mode asserts the naive path still reproduces every value published in
+`results/naive/mfu_calculation.md`, so the formulas cannot drift silently.
+
+The bandwidth figures assume weights are read exactly once per pass
+and the cache is read in full each decode step Nothing here observes actual DRAM traffic.
+
+## Memory
+
+| ptok | naive | cached | delta | cache size |
+|---|---|---|---|---|
+| 16 | 2970.9 MiB | 2961.9 MiB | -9.0 | 7.4 MiB |
+| 64 | 2974.9 MiB | 2968.2 MiB | -6.7 | 8.8 MiB |
+| 256 | 2987.1 MiB | 2983.7 MiB | -3.5 | 14.0 MiB |
+| 1024 | 3036.0 MiB | 3054.4 MiB | +18.5 | 35.0 MiB |
+| 4096 | 3231.3 MiB | 3332.5 MiB | +101.1 | 119.0 MiB |
+
+`cache size` is `(P + 256) x 28 KiB` from the [README's per token arithmetic](/writing/inference#memory-arithmetic).
+Cached is cheaper than naive at short prompts and more expensive at long ones,
+crossing over between p256 and p1024.
+
+The direction follows from two effects. Cached holds state that naive did not,
+and naive materialized activations for forward passes over the whole sequence
+that cached never runs.
+
+The magnitude does not follow. The residual, `cache size` minus `delta`, is
+16.4, 15.5, 17.5, 16.5 and 17.9 MiB across the five prompts. Its roughly
+constant at 16 to 18 MiB regardless of prompt length. An activation based
+account predicts a residual that scales with sequence length, since naive's
+largest forward pass is 271 tokens at p16 and 4351 at p4096. A constant offset
+is inconsistent with that account. This is recorded as an open question.
+
+## TTFT
+
+Prefill is the same operation in both engines, so these values act as a
+control.
+
+| prompt | naive | cached |
+|---|---|---|
+| p16 | 0.022s | 0.034s |
+| p64 | 0.021s | 0.027s |
+| p256 | 0.022s | 0.025s |
+| p1024 | 0.062s | 0.055s |
+| p4096 | 0.255s | 0.248s |
+
+p1024 and p4096 match within noise, which confirms that only decode changed.
+p16, p64 and p256 rose by 3 to 12 ms.
+
+The leading candidate is the 56 tensor allocations, 28 layers times keys and
+values, that happen inside the first `update()` and therefore inside the timed
+prefill. That explanation predicts a roughly constant cost at every prompt
+length, and p4096 did not rise. It is incomplete, and recorded as an open
+question.
+
+## Bottleneck, and what follows
+
+The binding constraint is per step host overhead, and it now applies at every
+prompt length. In naive it applied only at short prompts. Naive's analysis
+predicted this change.
+
+The GPU is idle roughly 77% of every decode step: 5.2 ms of memory traffic
+inside a 22 ms step. Nothing about capacity is under pressure. Even at p4096
+the cache is 119 MiB against roughly 19 GiB free.
+
+Batching uses that idle time. Host cost is charged per forward pass rather than
+per sequence, so running B sequences through one pass produces B tokens for
+roughly the same 22 ms. Aggregate throughput scales with B until the added
+cache traffic consumes the bandwidth currently going unused.
+
+## Prediction, recorded before building batching
+
+Step time should stay near 22 ms as batch size grows, since the 1,123 kernel
+launches per pass do not multiply with the number of sequences riding through
+it. Aggregate throughput should be roughly `B x 45.5 tok/s`, scaling close to
+linearly.
+
+**Both pool sizes are measured from the batching engine onward, unconstrained
+and capped at 2 GiB**, and at 2 GiB that cap is what stops the scaling. 2 GiB holds 74,898 cached token positions: 17
+concurrent sequences at 4352 tokens, or 146 at 512. Bandwidth does not bind
+until roughly 353,000 token positions, so capacity binds first with a 4.7x
+margin.
+
+Uncapped, the A10's ~19 GiB free holds 711,534 token positions and bandwidth
+would bind first at every sequence length tested here. Capacity would never be
+the constraint, and the memory management work that follows batching would have
+nothing to show. This is really only because our model takes up 3GB, whereas any
+larger model would have to be sharded across multiple GPUS, so this is to get a more
+accurate ratio of memory allocated to a cache w respect to model size.

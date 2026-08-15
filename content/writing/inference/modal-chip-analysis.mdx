@@ -1,0 +1,53 @@
+---
+title: "Modal GPU candidates"
+publishedAt: "2026-08-08"
+series: "inference"
+summary: "Why the A10, weighed against the L4 and the rest of the fleet."
+---
+
+All FLOPS figures are **dense** (no structured sparsity).
+
+## Core table
+
+| GPU | Modal name | Arch | Memory | Mem type | Bandwidth | FP16/BF16 tensor (dense) | FP32 (non-tensor) |
+|---|---|---|---|---|---|---|---|
+| A100 40GB | `A100-40GB` | Ampere (GA100) | 40 GB | HBM2 | 1,555 GB/s | 312 TFLOPS | 19.5 TFLOPS |
+| L40S | `L40S` | Ada (AD102) | 48 GB | GDDR6 ECC | 864 GB/s | 362 TFLOPS | 91.6 TFLOPS |
+| A10 | `A10` | Ampere (GA102) | 24 GB | GDDR6 | 600 GB/s | 125 TFLOPS | 31.2 TFLOPS |
+| L4 | `L4` | Ada (AD104) | 24 GB | GDDR6 | 300 GB/s | 121 TFLOPS | 30.3 TFLOPS |
+| T4 | `T4` | Turing (TU104) | 16 GB | GDDR6 | 300 GB/s | 65 TFLOPS | 8.1 TFLOPS |
+
+## Additional precision modes
+
+| GPU | TF32 tensor (dense) | FP8 tensor (dense) | INT8 tensor (dense) | BF16 |
+|---|---|---|---|---|
+| A100 40GB | 156 TFLOPS | — | 624 TOPS | yes |
+| L40S | 183 TFLOPS | 733 TFLOPS | 733 TOPS | yes |
+| A10 | 62.5 TFLOPS | — | 250 TOPS | yes |
+| L4 | 60 TFLOPS | 242 TFLOPS | 242 TOPS | yes |
+| T4 | — | — | 130 TOPS | **no** |
+
+Sparsity-enabled FP16/BF16 figures (2x dense): A100 624, L40S 733, A10 250,
+L4 242. T4 predates structured sparsity.
+
+## Notes
+
+- **T4 has no BF16.** Turing supports FP16 tensor cores but not BFloat16.
+- **T4 bandwidth is 300 GB/s** per NVIDIA's primary T4 datasheet. NVIDIA's
+  virtualization datasheet states "up to 320 GB/sec", which is the figure
+  most third-party spec sites repeat.
+- The T4's 65 TFLOPS is quoted by NVIDIA as "mixed precision (FP16/FP32)" —
+  FP16 multiply with FP32 accumulate, the same operation the other rows list
+  as FP16 Tensor Core.
+- **A100 40GB** exists in SXM4 and PCIe forms, both 1,555 GB/s at 40 GB.
+- **L40S / L4 / A10 are GDDR6, not HBM.**
+- FP32 column is the non-tensor-core CUDA-core rate; fp16/bf16 inference uses
+  the tensor-core path.
+
+## Sources
+
+[A100](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a100/pdf/nvidia-a100-datasheet-us-nvidia-1758950-r4-web.pdf)
+· [L40S](https://acecloud.ai/wp-content/uploads/2025/06/l40s-datasheet.pdf)
+· [A10](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/a10/pdf/a10-datasheet.pdf)
+· [L4](https://resources.nvidia.com/en-us-data-center-overview/l4-gpu-datasheet)
+· [T4](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/tesla-t4/t4-tensor-core-datasheet-951643.pdf)

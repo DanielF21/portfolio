@@ -13,6 +13,77 @@ pnpm lint
 pnpm dev          # then open the page and actually look at it
 ```
 
+## Writing
+
+Two shapes live under `content/writing/`, and they stay disjoint by structure
+rather than by filtering:
+
+```
+content/writing/
+  <slug>.mdx              a one-off        -> /writing/<slug>
+  <series>/index.mdx      the hub's prose  -> /writing/<series>
+  <series>/<part>.mdx     a part           -> /writing/<series>/<part>
+```
+
+A subdirectory is a series and its name must match a `slug` in
+`src/data/series.ts`. Inside it, **a file with a `part` number is a part and a
+file without one is an appendix**: supporting material the parts link into,
+reachable at its own URL, listed under "Supporting", and absent from the
+sequence and the prev/next pager. That one field is the whole distinction, so
+there is no second flag to keep in sync with it.
+
+`/writing/<series>` and `/writing/<one-off>` are the same route. Next refuses
+two differently named dynamic segments at one position, so `[slug]/page.tsx`
+resolves the series registry first and falls through to a one-off. `oneOffs()`
+throws if a top-level file name collides with a series directory, because the
+series would silently win and the article would be unreachable.
+
+### Nothing describes unwritten parts
+
+There is no `parts` list, no `totalParts`, and no status field in
+`series.ts`. A series is exactly as long as its directory. "Part N of M" takes M
+from what exists, and the end of a series renders no next link rather than a
+disabled one. A count in the registry is a roadmap in disguise, and it goes
+stale the moment a planned engine is dropped.
+
+### Pipeline order
+
+`markdownToHTML` in `src/data/mdx.ts`. Two orderings bind and the rest is free:
+`remarkGfm` before `remarkRehype` (it extends the grammar), and `rehypeSlug`
+before `collectHeadings` (it reads the ids). **Without `remarkGfm` every table
+renders as literal pipe characters**, and the tables are most of the substance.
+
+Listing is deliberately separate from compiling. `listDocs` reads frontmatter
+and stops; `getDoc` compiles. Indexes, the sitemap and both
+`generateStaticParams` need only the former, and compiling means Shiki over
+every block.
+
+Tables are wrapped in `.table-scroll` by a local plugin. The scroll must live on
+the wrapper: `display: block` on a `<table>` stops it being a table for layout
+and all columns come out equal width, which is exactly what a column of
+measurements must not do.
+
+### Code blocks and prose CSS
+
+Three things in `globals.css` bit, all from `@tailwindcss/typography` defaults
+meeting `rehype-pretty-code`:
+
+- **`keepBackground: false`** means Shiki does not paint a background, so
+  typography's `--tw-prose-pre-bg` showed through. It is dark in both themes,
+  and the light palette supplies dark text, so every block was dark on dark.
+  `.prose pre` now uses `bg-muted`, which flips with the theme.
+- **A fence with no language is never highlighted**, so it keeps typography's
+  pale `--tw-prose-pre-code`, which is invisible on a light surface. Not an
+  edge case: none of the fences in the writing declare a language, because they
+  hold arithmetic and directory trees. `.prose pre code:not([data-theme])`
+  fixes it without touching highlighted blocks.
+- Typography puts **literal backticks** around inline code via `::before` and
+  `::after`. Prose that names an identifier every other sentence gets two stray
+  glyphs per mention.
+
+Line numbers are opt in via `[data-line-numbers]`. An unscoped rule used to
+number every block on the site.
+
 ## The planet
 
 A walkable low-poly world at `/things/planet`, reached through a poster and an

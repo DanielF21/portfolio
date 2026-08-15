@@ -2,8 +2,8 @@ import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
 import { Icons } from "@/components/icons";
+import { NavLinks } from "@/components/layout/nav-links";
 import { ModeToggle } from "@/components/mode-toggle";
-import { hasWriting } from "@/data/mdx";
 import { SITE } from "@/data/site";
 
 /** Social name to glyph. Keyed off SITE.socials so the header and footer stay
@@ -21,18 +21,16 @@ const SOCIAL_ICONS: Record<string, (props: { className?: string }) => JSX.Elemen
  * skills badges and cut across project cards, because nothing reserved space
  * for it. A sticky header participates in layout and cannot do that.
  *
- * Server component: it reads the writing directory directly so the Writing link
- * only appears once there is something behind it. The route exists either way.
+ * Synchronous, and the Writing link is unconditional.
+ *
+ * It used to `await hasWriting()`, which existed to hide the link while the
+ * content directory was empty. That check compiled EVERY writing document to
+ * HTML, Shiki highlighting and all, to answer `length > 0`, and the header
+ * renders on every page of the site. With long analyses in the directory it was
+ * the most expensive thing on a page that did not display any writing at all.
+ * The directory is no longer empty, so the check bought nothing and cost that.
  */
-export async function SiteHeader() {
-  const showWriting = await hasWriting();
-
-  const links = [
-    { href: "/things", label: "Things" },
-    ...(showWriting ? [{ href: "/writing", label: "Writing" }] : []),
-    { href: "/work", label: "Work" },
-  ];
-
+export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
       <Container
@@ -47,15 +45,7 @@ export async function SiteHeader() {
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-2">
-          {links.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="rounded-md px-2 py-1.5 font-mono text-meta uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground sm:px-3"
-            >
-              {l.label}
-            </Link>
-          ))}
+          <NavLinks />
 
           {SITE.socials.map((s) => {
             const Icon = SOCIAL_ICONS[s.name];

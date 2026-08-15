@@ -1,12 +1,15 @@
 import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
-import { SITE } from "@/data/site";
+import { NAV, SITE } from "@/data/site";
 
 /**
  * The quiet end of every page. Carries the social links the old floating dock
- * used to, plus the Writing link unconditionally: the door stays open in the
- * URL space even while the header does not advertise it.
+ * used to.
+ *
+ * Maps the same NAV list the header does. It used to hardcode its own copy of
+ * the three links, in a different order, and unconditionally, back when the
+ * header hid Writing while the directory was empty.
  */
 export function SiteFooter() {
   const socials = SITE.socials;
@@ -22,24 +25,15 @@ export function SiteFooter() {
         </p>
 
         <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <Link
-            href="/things"
-            className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Things
-          </Link>
-          <Link
-            href="/writing"
-            className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Writing
-          </Link>
-          <Link
-            href="/work"
-            className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Work
-          </Link>
+          {NAV.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {link.label}
+            </Link>
+          ))}
           {socials.map((s) => (
             <a
               key={s.name}

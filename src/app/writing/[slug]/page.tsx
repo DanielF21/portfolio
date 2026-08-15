@@ -1,16 +1,41 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 
 import { Container } from "@/components/layout/container";
-import { getWriting, getWritingPost } from "@/data/mdx";
+import { ArticleBody } from "@/components/writing/article-body";
+import { SeriesHub } from "@/components/writing/series-hub";
+import { blurbText, SERIES, seriesBySlug } from "@/data/series";
 import { SITE } from "@/data/site";
+import {
+  getOneOff,
+  getSeriesIntro,
+  oneOffs,
+  seriesAppendices,
+  seriesParts,
+} from "@/data/writing";
 import { formatDate } from "@/lib/utils";
 
+/**
+ * Two things live at this depth: a series hub and a one-off article.
+ *
+ * They cannot be sibling route segments. Next refuses two differently named
+ * dynamic segments at the same position, so `[slug]` and `[series]` cannot
+ * coexist and the branch has to happen inside one file either way. Doing it
+ * here rather than in a `[...path]` catch-all keeps `params` narrowly typed and
+ * keeps depth 3 out of this file entirely.
+ *
+ * The series is resolved FIRST. A one-off whose filename collides with a series
+ * directory would be unreachable rather than ambiguous, and `oneOffs()` throws
+ * on exactly that case so it never ships.
+ */
+
 export async function generateStaticParams() {
-  const posts = await getWriting();
-  return posts.map((p) => ({ slug: p.slug }));
+  const singles = await oneOffs();
+  return [
+    ...singles.map((doc) => ({ slug: doc.slug })),
+    ...SERIES.map((series) => ({ slug: series.slug })),
+  ];
 }
 
 export async function generateMetadata({
@@ -18,13 +43,39 @@ export async function generateMetadata({
 }: {
   params: { slug: string };
 }): Promise<Metadata> {
-  const post = await getWritingPost(params.slug);
+  const series = seriesBySlug(params.slug);
+
+  if (series) {
+    const url = `${SITE.url}/writing/${series.slug}`;
+    // Metadata cannot hold markup, so the blurb goes in flat.
+    const description = blurbText(series.blurb);
+    return {
+      title: series.title,
+      description,
+      alternates: { canonical: url },
+      // A hub is an index, not an article.
+      openGraph: {
+        title: series.title,
+        description,
+        type: "website",
+        url,
+      },
+      twitter: {
+        card: "summary",
+        title: series.title,
+        description,
+      },
+    };
+  }
+
+  const post = await getOneOff(params.slug);
   if (!post) return {};
 
   const { title, publishedAt, summary, image } = post.metadata;
   return {
     title,
     description: summary,
+    alternates: { canonical: `${SITE.url}/writing/${post.slug}` },
     openGraph: {
       title,
       description: summary,
@@ -44,18 +95,38 @@ export async function generateMetadata({
   };
 }
 
-export default async function WritingPost({
+export default async function WritingSlugPage({
   params,
 }: {
   params: { slug: string };
 }) {
-  // getWritingPost returns null for a missing file rather than throwing, so an
+  const series = seriesBySlug(params.slug);
+
+  if (series) {
+    const [parts, appendices, intro] = await Promise.all([
+      seriesParts(series.slug),
+      seriesAppendices(series.slug),
+      getSeriesIntro(series.slug),
+    ]);
+
+    return (
+      <SeriesHub
+        series={series}
+        parts={parts}
+        appendices={appendices}
+        latest={parts[0]?.metadata.publishedAt ?? series.started}
+        intro={intro}
+      />
+    );
+  }
+
+  // getOneOff returns null for a missing file rather than throwing, so an
   // unknown slug is a 404 rather than the 500 the old blog produced.
-  const post = await getWritingPost(params.slug);
+  const post = await getOneOff(params.slug);
   if (!post) notFound();
 
   return (
-    <Container as="article" width="measure" className="py-block">
+    <Container as="article" width="page" className="py-block">
       <script
         type="application/ld+json"
         suppressHydrationWarning
@@ -76,27 +147,24 @@ export default async function WritingPost({
         }}
       />
 
-      <Link
-        href="/writing"
-        className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
-      >
-        &larr; writing
-      </Link>
+      <header className="max-w-measure">
+        <Link
+          href="/writing"
+          className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
+        >
+          &larr; writing
+        </Link>
 
-      <h1 className="mt-3 font-display text-page font-bold">
-        {post.metadata.title}
-      </h1>
+        <h1 className="mt-3 font-display text-page font-bold">
+          {post.metadata.title}
+        </h1>
 
-      <Suspense fallback={<p className="h-5" />}>
         <p className="mb-8 mt-2 font-mono text-meta text-muted-foreground">
           {formatDate(post.metadata.publishedAt)}
         </p>
-      </Suspense>
+      </header>
 
-      <div
-        className="prose max-w-none dark:prose-invert"
-        dangerouslySetInnerHTML={{ __html: post.source }}
-      />
+      <ArticleBody source={post.source} headings={post.headings} />
     </Container>
   );
 }
