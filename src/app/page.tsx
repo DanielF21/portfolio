@@ -1,4 +1,4 @@
-import { MapPin } from "lucide-react";
+import { Briefcase, GraduationCap, MapPin } from "lucide-react";
 import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
@@ -31,13 +31,27 @@ export default async function Page() {
           >
             {SITE.name}
           </h1>
-          <p
-            className="reveal mt-4 flex items-center gap-1.5 text-lead text-muted-foreground"
+          {/* Education, occupation, location, in that order. A list rather
+              than a sentence: three unrelated facts, and a screen reader should
+              hear them as three. Wraps rather than truncates on narrow screens,
+              which is why the row gap exists. */}
+          <ul
+            className="reveal mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-lead text-muted-foreground"
             style={revealDelay(1)}
           >
-            <MapPin className="size-[1em] shrink-0" aria-hidden />
-            San Francisco, CA
-          </p>
+            <li className="flex items-center gap-1.5">
+              <GraduationCap className="size-[1em] shrink-0" aria-hidden />
+              MIT
+            </li>
+            <li className="flex items-center gap-1.5">
+              <Briefcase className="size-[1em] shrink-0" aria-hidden />
+              Engineer
+            </li>
+            <li className="flex items-center gap-1.5">
+              <MapPin className="size-[1em] shrink-0" aria-hidden />
+              San Francisco, CA
+            </li>
+          </ul>
         </header>
 
         <section aria-labelledby="things-heading" className="flex flex-col gap-6">
