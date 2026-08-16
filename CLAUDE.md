@@ -328,11 +328,28 @@ an sRGB hex string and goes through R3F's colour management. The planet writes
 linear values into vertex colours. Both are internally consistent; mixing them
 is the bug. Never hand-write a linear vertex colour in this scene.
 
-### Width is proportional to the real dimension
+### Area is parameter count
 
-`layout.widthFor` is the only way a tensor dimension becomes world units, which
-is why the MLP is 5.83x the stream on screen and K/V are exactly 1/6 of Q. Two
-documented departures, both deliberate and both commented at the constant:
+Both axes go through one scale: `widthFor` takes a tensor's OUTPUT dimension and
+`heightFor` its INPUT one. Since `area = out * in * WIDTH_SCALE^2` and
+`params = in * out`, **a weight slab's on-screen area is its parameter count**,
+with no tuning. Biases put it 0.07% out; the constant is `3.8147e-6` units per
+parameter.
+
+What that buys, none of it composed: gate and up come out 17.5 wide and down
+17.5 tall, so a matrix and its transpose-shaped inverse are perpendicular
+because they are, and all three have the same area because all three have
+13,762,560 parameters. K and V are a sixth of Q's width and therefore a sixth of
+its area. Every projection is the same height because they all read the same
+1,536 wide stream.
+
+**Which axis is which is not free.** `tensor-slab` maps columns across the face
+and rows up it, and every caller passes `rows = input, cols = output`. Swapping
+them transposes every matrix in the scene AND turns the Q/K/V comparison from a
+width comparison into a height one, which is the reading its camera pose exists
+to make.
+
+Three documented departures, all deliberate and all commented at the constant:
 
 - **`CONDUIT_W`**: the long run of residual stream between blocks is schematic.
   At true section a 40-unit bar has more surface area than everything else
@@ -340,7 +357,15 @@ documented departures, both deliberate and both commented at the constant:
   that matters is local, and the MLP taper still starts at the true width.
 - **The vocabulary axis** is 297 units against a 3 unit stream, so the embedding
   wall is drawn with a VISIBLE break and the true count on the label. A silent
-  squash would make 151,936 rows look like a few dozen.
+  squash would make 151,936 rows look like a few dozen. **Elision breaks area
+  proportionality**, which is why the claim is scoped to weights inside a block:
+  the embedding is 233M parameters drawn at a third the area of a tensor 17x
+  smaller.
+- **`MIN_AXIS`**, the bottom end of the rule and the mirror of `ELIDE_ABOVE`. A
+  [1536] vector's second axis is `heightFor(1)` = 0.002 units, sub-pixel at every
+  distance. Floored slabs are drawn at `MIN_AXIS` **and outlined**, and the card
+  says why. A marked overstatement is honest; the silent 270x one this replaced
+  was not.
 
 ### Isolation is load bearing, not cosmetic
 
@@ -367,20 +392,136 @@ aside, and adds back.
 ### Grids are a shader, cells are not
 
 `grid-material.ts` draws a tensor's cell grid in the fragment shader, so every
-tensor is ONE draw call and stays sharp at any zoom. Two levels are drawn, the
-real grid and one ten times coarser, and **each fades on its own density**. That
+tensor is ONE draw call and stays sharp at any zoom. **Three** levels are drawn,
+each ten times coarser than the last, and **each fades on its own density**. That
 fade is not optional: the line test measures distance in pixels, so once cells go
 sub-pixel it returns a strong value everywhere and dense tensors render
 *brighter*, which reads as a paler object rather than a denser one.
+
+Two levels was not enough. `down_proj` is 8,960 x 1,536 drawn about 75 by 340
+pixels at the overview, so even every tenth row lands at 0.4 of a pixel: both
+levels faded and the largest object in frame rendered as a blank rectangle.
+
+**All six faces are drawn, but only two are the matrix.** The ±Z faces get the
+real 2D grid; the other four are the matrix seen EDGE ON and get 1D lamination
+at the row or column pitch, which is what a stack of sheets looks like from the
+side. Two things there will bite:
+
+- Faces are classified by **local position**, not by normal. `abs(normal.z) > 0.5`
+  works on a plain box and breaks the moment one is bevelled, because a fillet's
+  normal sweeps through the threshold.
+- `gridLevel1` is a separate function from `gridLevel` on purpose. The 2D one
+  takes `min(d.x, d.y)`, so feeding it a dummy second component makes the min
+  zero everywhere and the side faces paint **solid**.
 
 Real per-cell instancing is used in exactly one place, `scores.tsx`, because
 there the cells are the subject: the causal mask is the upper triangle NOT BEING
 THERE, and only geometry can show an absence.
 
+### Framing is measured, never typed
+
+`glossary` carries only the editorial half of a shot: angle, lens, and what
+fraction of the frame to fill. `auto-frame` measures the bounding box of whatever
+is in scope and computes the target and distance from it.
+
+This is not tidiness. All 14 poses used to carry a hand-tuned distance, and the
+moment tensor heights became real every one was wrong at once and in both
+directions: the output projection went from 11% of frame height to 67%, the MLP
+from 16% to **141%**. Re-tuning fourteen literals by eye against geometry that is
+still moving is how a scene ends up with its geometry bent to suit its cameras.
+
+Three things it is easy to get wrong here, all of which happened:
+
+- **Update world matrices before measuring.** `Box3.setFromObject` reads
+  `matrixWorld`, and three computes those at RENDER time, so anything mounted
+  this commit measures one focus stale. It cost the overview 5 units of height
+  while every number involved looked plausible.
+- **All three extents project onto screen height.** `screenHalfExtents` uses the
+  box support function along the camera's up vector. Taking height as
+  `sy * sin(phi)` alone ignores that a 51-unit run along Z rises across the frame
+  as it recedes, which was 17 units of uncounted height and a fit out by 2x.
+- **A support function is orthographic.** It measures a shadow, and is exact only
+  for a flat subject facing the camera. The stack is 43 units deep at a distance
+  around 60, so its near end projects a third larger than its centre; solving the
+  angular size at the near face instead adds `halfDepth` to the distance. Without
+  that the embedding wall sat off the left edge of a frame the arithmetic called
+  82% full.
+- **Exclude what spans the scene**: the ground plane and the long stream conduit
+  carry `userData.noFit`. Measuring the 41-unit stream backed "One block" off to
+  78 units for a block 9 units deep.
+
+### The overview opens nothing
+
+Every block is a plate until you ask for one. With the hero open the model is 20
+units tall against 52 long, which projects to 1.11:1 and **cannot** fill a 2.1:1
+viewport at any angle or distance; closed it projects at 1.91:1. Overview theta
+is 0.85 for the same reason, computed from the frame rather than chosen.
+
+Collapsing every block costs the stream its visible connections, so one instanced
+tap per block puts them back in one draw call. Without them the stream reads as a
+bar lying alongside the stack rather than something all 28 edit, which is exactly
+the misreading the branch geometry exists to prevent.
+
+### One card, and labels at exactly your level
+
+There is no projected-label layer. `Anchor` draws a short name as an in-world
+sprite, which faces the camera for free, is occluded by geometry correctly, and
+cannot drift from what it names. Details live in the DOM info card, driven by
+hover and falling back to focus.
+
+**A label shows only when its scope IS the focus.** `Scope` provides its path
+through context and `Anchor` reads it. The rule tightened twice: "am I zoomed in
+at all" put fifteen labels on the "One block" shot, and "or one level down" fixed
+that but broke "Attention", which has five sub-stations carrying twelve labels
+between them. A group view needs no in-world labels: the index lists what is
+inside it, the card names what the cursor is on, the status bar says where you
+are.
+
+Sprites are excluded from the fit, so **a label placed outside the geometry's
+bounding box is outside the frame**. Labels also get lifted toward the camera by
+their own height, because an anchor sits on the edge of what it names and depth
+testing ate the buried half ("Q projection" rendered as "ection").
+
+### Light, and the palette
+
+The old rig was `ambient 0.85` against a key of `1.5`, putting the darkest face
+of every box at 57% of its lit face. That one ratio was the largest single cause
+of "everything looks blocky": boxes lit that flatly have no readable form, and 28
+identical silhouettes in a row is a grey wall.
+
+**The background is the accent hue at 7% lightness**, not a neutral. That is the
+reference's own recipe, measured off it, and it is why the accent never looks
+pasted on. The first version had a blue-black backdrop (hue 225) under an orange
+accent (hue 19), 154 degrees apart.
+
+Weights sit near the background value and read by **silhouette and rim light**
+rather than by being a competing colour, so the rim light in `scene.tsx` is load
+bearing: remove it and the palette has to move with it.
+
+**Fog is ranged off the camera's distance**, not in world units. The camera
+stands 5 units from a projection and 114 from the whole stack, so any absolute
+far plane either erases the overview (105 did) or does nothing close up.
+
+Changing exposure means re-tuning emissives. Six materials are
+`toneMapped={false}` and will not follow it.
+
+### No postprocessing, and no drei in this chunk
+
+Both deliberate.
+
+`EffectComposer` would break `__transformerRender`, which calls `gl.render`
+directly and is the only way to measure anything in a backgrounded tab. And
+**bloom is disallowed by this piece's own rule**: it spreads emissive energy onto
+neighbouring geometry, painting values where there are none, and re-creates the
+exact density-fade failure `grid-material` exists to prevent.
+
+The transformer chunk imports **zero** drei; only `planet/*` does. The ground
+grid is hand-rolled off the same `fwidth` trick `grid-material` already uses.
+
 ### Budget
 
-52 draw calls in the worst view (the overview), 10,644 triangles. Every isolated
-station is under 25.
+41 draw calls in the worst view (one open block), 10,190 triangles. The overview
+is 18. Every isolated station is under 25.
 
 ### Dev hooks
 
@@ -391,11 +532,31 @@ station is under 25.
 | `window.__transformerPose(patch, snap = true)` | Nudge the camera; `snap` writes `current` too |
 | `window.__transformerLayer(n)` | Move the hero block |
 | `window.__transformerRender()` | Force one frame synchronously, return its cost |
+| `window.__transformerTick(n)` | Advance the R3F loop n frames, running every `useFrame` |
+| `window.__transformerFit(fill)` | Frame what is in scope, from its measured bbox |
+| `window.__transformerView` | The live `view` singleton |
 
 `__transformerRender` exists because a backgrounded tab never fires
 `requestAnimationFrame`, and **awaiting rAF there hangs the renderer for 45
 seconds**. Without it, measuring a draw-call budget costs one screenshot per
 view. Same trap the planet's testing note warns about.
+
+**`__transformerRender` does NOT run `useFrame`.** It calls `gl.render` directly,
+which is what makes it side-effect free, and that became a trap once `auto-frame`
+started measuring the scene in a `useFrame`: the camera would never move and
+every measurement was of a pose that had not been applied. `__transformerTick`
+is the one that advances the loop. The working sequence for checking a view in a
+backgrounded tab is:
+
+```
+click the index entry
+await ~100ms                      // let React commit the new scope tree
+__transformerTick(3)              // auto-frame measures, writes view.desired
+__transformerPose({}, true)       // snap current to desired; no waiting on the chase
+__transformerTick(2)              // let DepthCue pick up the new distance
+__transformerRender()             // read the cost
+screenshot
+```
 
 ### The capture
 

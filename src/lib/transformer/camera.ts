@@ -90,7 +90,7 @@ export function screenHalfExtents(
   sz: number,
   theta: number,
   phi: number
-): { halfW: number; halfH: number } {
+): { halfW: number; halfH: number; halfDepth: number } {
   const ct = Math.cos(theta);
   const st = Math.sin(theta);
   const cp = Math.cos(phi);
@@ -101,7 +101,14 @@ export function screenHalfExtents(
     0.5 *
     (sx * Math.abs(st * cp) + sy * Math.abs(sp) + sz * Math.abs(ct * cp));
 
-  return { halfW, halfH };
+  // Extent along the VIEW direction, which is what perspective needs. See
+  // `distanceFor`: the two above are orthographic, and a subject 43 units deep
+  // does not obey them.
+  const halfDepth =
+    0.5 *
+    (sx * Math.abs(sp * st) + sy * Math.abs(cp) + sz * Math.abs(sp * ct));
+
+  return { halfW, halfH, halfDepth };
 }
 
 /**
@@ -127,6 +134,7 @@ export function screenHalfExtents(
 export function distanceFor(
   halfW: number,
   halfH: number,
+  halfDepth: number,
   aspect: number,
   fov: number,
   fill: number
@@ -135,7 +143,21 @@ export function distanceFor(
   // A horizontal half extent has to be divided by the aspect ratio before it
   // can be compared against the same vertical half angle.
   const need = Math.max(halfH, halfW / Math.max(aspect, 0.0001));
-  return clamp(need / Math.tan(halfFov) / fill, DISTANCE_MIN, DISTANCE_MAX);
+
+  // PERSPECTIVE, NOT ORTHOGRAPHIC. `screenHalfExtents` is a support function,
+  // which measures a shadow rather than a projection: it is exact only for a
+  // flat subject facing the camera. This scene's subjects are not flat. The
+  // whole stack is 43 units deep at a distance around 60, so its near end sits
+  // a third closer than its centre and projects a third larger, and a fit that
+  // ignored that put the embedding wall off the left edge of a frame the
+  // arithmetic said was 82% full.
+  //
+  // Solving the angular size at the NEAR face rather than at the centre gives
+  // this in closed form: what the near face subtends is `need / (d - halfDepth)`,
+  // so the distance that makes that equal `fill` of the half angle is the
+  // orthographic answer plus the half depth.
+  const d = need / Math.tan(halfFov) / fill + halfDepth;
+  return clamp(d, DISTANCE_MIN, DISTANCE_MAX);
 }
 
 /** How fast `current` chases `desired`, in e-folds per second. Higher is

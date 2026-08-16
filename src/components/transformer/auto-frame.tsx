@@ -55,6 +55,7 @@ export function AutoFrame() {
 
   const pending = useRef(true);
   const seenRefit = useRef(view.refit);
+  const seenSize = useRef<[number, number]>([0, 0]);
   const box = useMemo(() => new THREE.Box3(), []);
   const item = useMemo(() => new THREE.Box3(), []);
   const size = useMemo(() => new THREE.Vector3(), []);
@@ -70,6 +71,16 @@ export function AutoFrame() {
       seenRefit.current = view.refit;
       pending.current = true;
     }
+
+    // A resize changes the aspect ratio, and the aspect ratio is half of what
+    // decides the distance. Without this the fit is correct only for the size
+    // the window happened to be when you last picked something, and narrowing
+    // the window silently crops the subject rather than backing off from it.
+    if (view.width !== seenSize.current[0] || view.height !== seenSize.current[1]) {
+      seenSize.current = [view.width, view.height];
+      pending.current = true;
+    }
+
     if (!pending.current) return;
     // The overlay writes `view.width/height` from the canvas each frame; before
     // the first one there is no aspect ratio to fit against.
@@ -109,11 +120,17 @@ export function AutoFrame() {
 
     const { theta, phi, fov, fill } = entry.view;
     const aspect = view.width / view.height;
-    const { halfW, halfH } = screenHalfExtents(size.x, size.y, size.z, theta, phi);
+    const { halfW, halfH, halfDepth } = screenHalfExtents(
+      size.x,
+      size.y,
+      size.z,
+      theta,
+      phi
+    );
 
     view.desired = {
       target: [centre.x, centre.y, centre.z],
-      distance: distanceFor(halfW, halfH, aspect, fov, fill),
+      distance: distanceFor(halfW, halfH, halfDepth, aspect, fov, fill),
       theta,
       phi,
       fov,

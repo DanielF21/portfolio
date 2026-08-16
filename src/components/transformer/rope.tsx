@@ -140,12 +140,11 @@ export function Rope() {
         sub={`period ${formatInt(Math.round(2 * Math.PI / inverseFreq(SAMPLED[PAIRS - 1])))} tokens`}
         position={[-(COLS / 2) * CELL - 0.3, -((PAIRS - 1) / 2) * CELL, 0]}
       />
-      <Anchor
-        id="rope.head"
-        text="RoPE"
-        sub={`${headDim / 2} dimension pairs · theta ${formatInt(ropeTheta)} · no parameters`}
-        position={[(COLS / 2) * CELL + 0.3, ((PAIRS - 1) / 2) * CELL + 0.5, 0]}
-      />
+      {/* No "RoPE" label here. The index, the breadcrumb, the card and the
+          status bar all already say it, and this was the fourth copy: placed
+          outside the grid's bounding box, which the camera fits, so it was
+          clipped by the top of the frame as well as redundant. The two labels
+          that stay are the ones the picture cannot say by itself. */}
     </group>
   );
 }
