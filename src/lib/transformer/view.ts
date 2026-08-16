@@ -3,9 +3,9 @@
  *
  * Same architecture, and same reason, as the planet's `input.ts` and
  * `compass.ts`: the render loop writes here every frame and the DOM overlay
- * reads it from its own rAF loop. Routing per-frame camera and label positions
- * through React state would re-render the overlay 60 times a second for what is
- * ultimately a handful of CSS properties.
+ * reads it from its own rAF loop. Routing per-frame camera state through React
+ * would re-render the overlay 60 times a second for what is ultimately a handful
+ * of CSS properties.
  *
  * zustand carries EDGES (which node is focused, is the scene ready). This file
  * carries FRAMES. Nothing that changes every frame belongs in the store.
@@ -16,45 +16,16 @@
 
 import { DEFAULT_POSE, type Pose } from "./camera";
 
-/** How many labels can be on screen at once. More than this is noise, not
- *  annotation, and the declutter pass drops the rest. */
-export const LABEL_SLOTS = 14;
-
-export interface LabelSlot {
-  /** Anchor id this slot is showing, or null when unused this frame. */
-  id: string | null;
-  text: string;
-  /** Second line: the real shape, parameter count or byte figure. */
-  sub: string;
-  /** Screen position in CSS pixels, relative to the canvas. Where the leader
-   *  line ENDS, i.e. the anchor point on the object. */
-  x: number;
-  y: number;
-  /** Distance from the camera, for depth sorting and distance fade. */
-  depth: number;
-  /** 0..1. Zero means fully hidden: off screen, behind you, or decluttered. */
-  opacity: number;
-  /** True when the box sits to the LEFT of its anchor because placing it to the
-   *  right would run off the viewport. The widest tensors in the model reach
-   *  the frame edge by design, so their labels do this constantly. */
-  flip: boolean;
-}
-
-function emptyLabel(): LabelSlot {
-  return { id: null, text: "", sub: "", x: 0, y: 0, depth: 0, opacity: 0, flip: false };
-}
-
 export const view = {
-  /** Where the camera wants to be. Both the drag handler and the index panel
-   *  write here, and nothing else does. */
+  /** Where the camera wants to be. The drag handler, the index and `auto-frame`
+   *  all write here, and nothing else does. */
   desired: DEFAULT_POSE as Pose,
   /** Where the camera is. The rig writes this; everything else reads it. */
   current: DEFAULT_POSE as Pose,
 
-  labels: Array.from({ length: LABEL_SLOTS }, emptyLabel),
-
-  /** Canvas size in CSS pixels, so the overlay can position without measuring
-   *  the DOM itself every frame. */
+  /** Canvas size in CSS pixels. Read by `auto-frame` to fit both screen axes,
+   *  and it is the CANVAS, not the window: the canvas is a grid cell inside the
+   *  shell, so it is narrower than the viewport by the index panel's width. */
   width: 0,
   height: 0,
 
@@ -76,7 +47,6 @@ export function requestRefit(): void {
 export function resetView(): void {
   view.desired = DEFAULT_POSE;
   view.current = DEFAULT_POSE;
-  view.labels = Array.from({ length: LABEL_SLOTS }, emptyLabel);
   view.width = 0;
   view.height = 0;
   view.refit = 0;

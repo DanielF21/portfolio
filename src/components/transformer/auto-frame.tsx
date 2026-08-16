@@ -4,7 +4,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
-import { distanceFor } from "@/lib/transformer/camera";
+import { distanceFor, screenHalfExtents } from "@/lib/transformer/camera";
 import { OVERVIEW_ID, entryById } from "@/lib/transformer/glossary";
 import { useTransformerStore } from "@/lib/transformer/store";
 import { view } from "@/lib/transformer/view";
@@ -109,15 +109,7 @@ export function AutoFrame() {
 
     const { theta, phi, fov, fill } = entry.view;
     const aspect = view.width / view.height;
-
-    // Screen-space half extents. World Y always maps to screen up scaled by
-    // sin(phi); the two horizontal axes each contribute to screen right by how
-    // much of them the camera sees across, which is what these sines and
-    // cosines are. Approximate (it ignores perspective divergence over the
-    // subject's own depth) but the fill fraction absorbs that.
-    const halfH = (size.y * Math.abs(Math.sin(phi))) / 2;
-    const halfW =
-      (Math.abs(size.z * Math.sin(theta)) + Math.abs(size.x * Math.cos(theta))) / 2;
+    const { halfW, halfH } = screenHalfExtents(size.x, size.y, size.z, theta, phi);
 
     view.desired = {
       target: [centre.x, centre.y, centre.z],

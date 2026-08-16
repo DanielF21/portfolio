@@ -64,11 +64,51 @@ export const DISTANCE_MIN = 1.2;
 export const DISTANCE_MAX = 220;
 
 /**
+ * An axis-aligned box's half extents ON SCREEN, given the orbit angles.
+ *
+ * The camera sits at spherical (theta, phi) from its target, so its right and up
+ * vectors are known in closed form:
+ *
+ *   right = (-cos t,          0,       sin t)
+ *   up    = (-sin t cos p,  sin p,  -cos t cos p)
+ *
+ * and a box of size s projects onto either axis with half extent
+ * `0.5 * (sx|ax| + sy|ay| + sz|az|)`, which is the standard support function of
+ * a box along a direction.
+ *
+ * ALL THREE TERMS MATTER, and getting that wrong is the whole reason this
+ * function exists rather than being inlined. The first version computed screen
+ * height as `sy * sin(phi)` alone, on the reasoning that world Y is what points
+ * up the screen. At a three quarter view it is not: a 51 unit run along Z rises
+ * across the frame as it recedes and contributed 17 units of screen height that
+ * were simply not counted, so the fit was out by a factor of two and the model
+ * ran off the bottom of a frame the arithmetic said it filled.
+ */
+export function screenHalfExtents(
+  sx: number,
+  sy: number,
+  sz: number,
+  theta: number,
+  phi: number
+): { halfW: number; halfH: number } {
+  const ct = Math.cos(theta);
+  const st = Math.sin(theta);
+  const cp = Math.cos(phi);
+  const sp = Math.sin(phi);
+
+  const halfW = 0.5 * (sx * Math.abs(ct) + sz * Math.abs(st));
+  const halfH =
+    0.5 *
+    (sx * Math.abs(st * cp) + sy * Math.abs(sp) + sz * Math.abs(ct * cp));
+
+  return { halfW, halfH };
+}
+
+/**
  * How far back to stand so a subject of a given size fills `fill` of the frame.
  *
  * Pure trigonometry, no three, so it can live here next to the pose it produces.
- * `halfW`, `halfH` are the subject's half extents on the screen's two axes,
- * already resolved from its bounding box by whoever measured it.
+ * `halfW`, `halfH` come from `screenHalfExtents`.
  *
  * WHY DISTANCES ARE NO LONGER TYPED BY HAND. Every camera pose in the glossary
  * used to carry a literal distance tuned against the geometry of the day. When

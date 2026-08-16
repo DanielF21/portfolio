@@ -210,17 +210,18 @@ const EXPLOSION_GAP = (EXPLODED_DEPTH - BLOCK_PITCH) / 2;
  * the distance, which is both reading order and the direction the fly-through
  * travels. Flipping this reverses the dataflow on screen.
  */
-export function blockZ(i: number, focused: number): number {
+export function blockZ(i: number, focused: number, open = true): number {
   const d = focused - i;
+  if (!open) return d * BLOCK_PITCH;
   if (d === 0) return 0;
   return d * BLOCK_PITCH + Math.sign(d) * EXPLOSION_GAP;
 }
 
 /** Where the stack starts and ends along Z, so the residual stream knows how
  *  long to be and the overview knows what it has to frame. */
-export function stackZRange(focused: number): [number, number] {
-  const first = blockZ(0, focused);
-  const last = blockZ(CONFIG.numHiddenLayers - 1, focused);
+export function stackZRange(focused: number, open = true): [number, number] {
+  const first = blockZ(0, focused, open);
+  const last = blockZ(CONFIG.numHiddenLayers - 1, focused, open);
   return [Math.min(first, last), Math.max(first, last)];
 }
 
@@ -306,7 +307,19 @@ export type Tier = "exploded" | "solid" | "plate";
  *  without cluttering the hero. */
 export const SOLID_RADIUS = 1;
 
-export function tierFor(i: number, focused: number): Tier {
+export function tierFor(i: number, focused: number, open = true): Tier {
+  // THE OVERVIEW OPENS NOTHING. Every block is a plate until you ask for one.
+  //
+  // It used to hold the hero open at all times, and that cost the whole-model
+  // shot twice over. The MLP's `down` stands 17.5 units where a plate is 5, so
+  // one open block made the model 20 units tall against 52 long: measured, its
+  // projected bounding box is 1.11:1 and it cannot fill a 2.1:1 viewport at any
+  // three quarter angle, at any distance. It also made the overview a picture
+  // of one MLP with a stack behind it rather than a picture of the stack.
+  //
+  // Closed, the same shot projects at 1.91:1, which is the frame. And the
+  // opening becomes what drilling in is FOR.
+  if (!open) return "plate";
   const d = Math.abs(i - focused);
   if (d === 0) return "exploded";
   if (d <= SOLID_RADIUS) return "solid";

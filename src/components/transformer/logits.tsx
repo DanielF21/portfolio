@@ -100,7 +100,11 @@ export function Logits({ z }: { z: number }) {
         id="logits"
         text="Logits"
         sub={`${formatInt(vocabSize)} scores · ${formatBytes(bytesPerPosition)} per position`}
-        position={[WIDTH / 2, SEGMENT_H + GAP_H / 2, 0]}
+        // Lifted clear of the LM head's label. Both sit at the output end of the
+        // model within a few units of each other, and in-world labels do not
+        // declutter themselves the way the old projected ones did: the fix is
+        // to place them apart rather than to sort them at runtime.
+        position={[WIDTH / 2, SEGMENT_H * 2 + GAP_H, 0]}
       />
       <Anchor
         id="sample"

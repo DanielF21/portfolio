@@ -124,16 +124,24 @@ export const CAM_FAR = 900;
 // -------------------------------------------------------------------- fog
 
 /**
- * Linear fog range, in world units from the camera.
+ * Fog range, as MULTIPLES OF THE CAMERA'S DISTANCE rather than world units.
  *
  * Depth cueing, not atmosphere. The model runs tens of units deep and every
- * block is identical, so without this the far end of the stack is lit exactly
+ * block is identical, so without fog the far end of the stack is lit exactly
  * like the near end and the eye has nothing to order them by. Fog colour is the
  * background, so receding geometry dissolves into the field rather than into a
  * visible haze.
+ *
+ * WHY RELATIVE. A fixed range cannot serve both ends of this piece. The camera
+ * sits 5 units from the output projection and 114 from the whole stack, a
+ * factor of more than twenty, so any absolute far plane is either so close that
+ * the overview is a solid wall of background (which is exactly what happened at
+ * 105) or so far that a close-up gets no depth cue at all. Tying it to the shot
+ * means every shot gets the same amount of cueing, which is what depth cueing
+ * meant in the drafting sense the term comes from.
  */
-export const FOG_NEAR = 26;
-export const FOG_FAR = 105;
+export const FOG_NEAR_SCALE = 0.55;
+export const FOG_FAR_SCALE = 2.1;
 
 /** Hue every neutral above was mixed toward. Exported so a future colour can be
  *  derived rather than eyeballed. */

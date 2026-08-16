@@ -1,24 +1,24 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useEffect, useRef } from "react";
-import type * as THREE from "three";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
 
 import {
   CAM_FAR,
   CAM_NEAR,
   BACKGROUND,
-  FOG_FAR,
-  FOG_NEAR,
+  FOG_FAR_SCALE,
+  FOG_NEAR_SCALE,
 } from "@/lib/transformer/theme";
 import { DEFAULT_POSE } from "@/lib/transformer/camera";
 import { attachControls } from "@/lib/transformer/input";
+import { view } from "@/lib/transformer/view";
 
 import { AutoFrame } from "./auto-frame";
 import { CameraRig } from "./camera-rig";
 import { DevHooks } from "./dev-hooks";
 import { Ground } from "./ground";
-import { LabelTracker } from "./label-tracker";
 import { ReadySignal } from "./ready-signal";
 import { Stack } from "./stack";
 
@@ -50,6 +50,40 @@ function RimLight() {
   });
 
   return <directionalLight ref={ref} intensity={1.35} color="#ffd9c2" />;
+}
+
+/**
+ * Fog, ranged off the camera's own distance rather than off world units.
+ *
+ * See `FOG_NEAR_SCALE`. The camera stands 5 units from a projection and 114
+ * from the whole stack, so a fixed far plane either erases the overview or does
+ * nothing for a close-up. This gives every shot the same amount of cueing.
+ *
+ * Written straight onto the fog object each frame rather than through React,
+ * because the distance it follows changes sixty times a second while the camera
+ * is moving and none of that should re-render anything.
+ */
+function DepthCue() {
+  const scene = useThree((s) => s.scene);
+  const fog = useMemo(
+    () => new THREE.Fog(BACKGROUND, 1, 2),
+    []
+  );
+
+  useEffect(() => {
+    scene.fog = fog;
+    return () => {
+      scene.fog = null;
+    };
+  }, [scene, fog]);
+
+  useFrame(() => {
+    const d = view.current.distance;
+    fog.near = d * FOG_NEAR_SCALE;
+    fog.far = d * FOG_FAR_SCALE;
+  });
+
+  return null;
 }
 
 /**
@@ -138,12 +172,7 @@ export default function Scene({ lowPower, onContextLost }: Props) {
         }}
       >
         <color attach="background" args={[BACKGROUND]} />
-        {/* Depth cueing. The model runs tens of units deep and every block is
-            identical, so without this the far end of the stack is lit exactly
-            like the near end and the eye has nothing to order them by. Fog
-            colour is the background, so geometry recedes into the field rather
-            than into a visible haze. */}
-        <fog attach="fog" args={[BACKGROUND, FOG_NEAR, FOG_FAR]} />
+        <DepthCue />
 
         {/*
           THE OLD RIG WAS ambient 0.85 AGAINST A KEY OF 1.5, which put the
@@ -172,9 +201,6 @@ export default function Scene({ lowPower, onContextLost }: Props) {
         {/* After Stack, so the scope groups for the current focus are already
             in the graph when it measures them. */}
         <AutoFrame />
-        {/* After Stack, so anchors mounted this commit are already registered
-            when the tracker's first frame runs. */}
-        <LabelTracker />
         <ReadySignal />
         <DevHooks />
       </Canvas>

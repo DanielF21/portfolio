@@ -10,7 +10,7 @@ import { BACKGROUND } from "@/lib/transformer/theme";
 import { resetView } from "@/lib/transformer/view";
 import { WebglBoundary } from "@/components/planet/webgl-boundary";
 
-import { Hud } from "./overlay/hud";
+import { Shell } from "./overlay/shell";
 // Imported statically, not via next/dynamic. This module is itself only ever
 // reached through a `dynamic(..., { ssr: false })` in things/loaders.tsx, so
 // three still never enters the server bundle or the initial chunk. Nesting a
@@ -92,16 +92,15 @@ export default function TransformerStage({ onClose }: Props) {
       className="fixed inset-0 z-50 overflow-hidden overscroll-none"
       style={{ background: BACKGROUND }}
     >
-      <div
-        className={`absolute inset-0 transition-opacity duration-500 ${
-          ready ? "opacity-100" : "pointer-events-none opacity-0"
-        }`}
-      >
+      {/* The chrome paints immediately and only the viewport cross-fades. A
+          header and an index that appear half a second late read as a layout
+          bug rather than as loading, and the frame is what tells you the thing
+          is loading in the first place. */}
+      <Shell onExit={close} ready={ready}>
         <WebglBoundary onError={close}>
           <Scene lowPower={lowPower} onContextLost={close} />
         </WebglBoundary>
-        <Hud onExit={close} />
-      </div>
+      </Shell>
     </div>,
     document.body
   );

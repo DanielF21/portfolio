@@ -60,9 +60,15 @@ export const INDEX: readonly IndexEntry[] = [
     // A long lens from far back, which is what a photographer does to a row of
     // columns: at a normal 45 degree fov the near end of a 28 block stack is
     // more than twice as close as the far end and the blocks stop reading as
-    // identical. Filled loosely, because the whole point of the shot is that
-    // the model keeps going.
-    view: { theta: 0.62, phi: 1.15, fov: 24, fill: 0.82 },
+    // identical.
+    //
+    // Theta is set from the frame rather than by eye. The model is roughly
+    // 4.2 x 5.5 x 52, and its projected aspect at angle t is
+    // (4.2|cos t| + 52|sin t|) : (5.5 sin p + 52|cos t| cos p). At the old 0.62
+    // that comes out near 1.5:1 inside a 2.1:1 viewport, so the stack ran
+    // diagonally corner to corner and left both other corners empty. 0.85 puts
+    // it at almost exactly 2:1, which is the shape of the hole it has to fill.
+    view: { theta: 0.85, phi: 1.16, fov: 24, fill: 0.88 },
   },
 
   {

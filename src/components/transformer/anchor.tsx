@@ -1,75 +1,147 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import type { Object3D } from "three";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
+import * as THREE from "three";
 
 import { OVERVIEW_ID } from "@/lib/transformer/glossary";
 import { useTransformerStore } from "@/lib/transformer/store";
 
 /**
- * A point in the scene that wants a label.
+ * A short name, drawn IN the world at the thing it names.
  *
- * Registers an empty Object3D wherever it is placed and nothing else. The
- * label's screen position comes from that object's WORLD transform, read by
- * `label-tracker`, so an anchor cannot drift from the thing it names: move the
- * slab and the anchor moves with it, because it is inside the same group.
+ * WHAT THIS USED TO BE. An empty Object3D that registered itself so a DOM layer
+ * could project it to screen space, place a `<div>` beside it and draw an SVG
+ * leader line. That system worked and was still the wrong idea: it put four or
+ * five two-line captions over the middle of every shot, its declutter pass meant
+ * which ones survived changed as you orbited, and a label with a leader line is
+ * a thing pointing at the subject rather than a thing on it. The reference this
+ * piece answers has none. It has one card.
  *
- * The alternative, a table of label positions computed from the layout
- * constants, duplicates every placement and goes stale the first time a local
- * offset changes inside a component.
+ * So the details moved to the card and what stayed here is the SHORT name only.
+ * A sprite is the right primitive for it: it faces the camera for free, it is
+ * occluded by geometry in front of it (which a DOM label can never be), and it
+ * cannot drift from what it names because it lives inside the same group.
+ *
+ * The `sub` line is deliberately accepted and ignored. Every call site already
+ * computes a good one out of the model graph, the card shows exactly that for
+ * whatever the cursor is on, and dropping the prop would mean touching
+ * twenty-three call sites to delete information that is still correct.
+ *
+ * CONSTANT SIZE ON SCREEN. A fixed world height is illegible at the overview and
+ * enormous in a close-up, and this scene's camera distance ranges over a factor
+ * of more than twenty. Scaling with distance keeps a label the same number of
+ * pixels everywhere, which is what a label is for.
+ *
+ * Technique is the planet's `label-sprite`, deliberately forked rather than
+ * shared: that one bakes the planet's blue pill and a sans face, and the two
+ * pieces have opposite colour conventions on purpose.
  */
 
-export interface AnchorRecord {
-  id: string;
-  text: string;
-  /** Second line, usually the real shape or byte count. */
-  sub?: string;
-  object: Object3D;
+const FONT_PX = 56;
+const PAD_X = 26;
+const PAD_Y = 16;
+
+/** Fraction of the frame's height one label occupies. Small: these are ticks on
+ *  a drawing, not titles. */
+const SCREEN_FRACTION = 0.032;
+
+interface Built {
+  texture: THREE.CanvasTexture;
+  aspect: number;
 }
 
-/** Live anchors, in mount order. Read once per frame by the tracker. */
-export const anchors: AnchorRecord[] = [];
+function build(text: string): Built | null {
+  const measure = document.createElement("canvas").getContext("2d");
+  if (!measure) return null;
 
-/**
- * Anchors are scoped the same way geometry is, and for the same reason.
- *
- * A `Scope` already unmounts the geometry of a station you are not looking at,
- * which takes its anchors with it. The case that needs handling is the OTHER
- * direction: at the overview every station is mounted, so every part label
- * competes for the middle of the frame and you get seven labels stacked on the
- * hero block. Part labels are for when you have asked to look at that part.
- *
- * `overview` opts a label into the whole-model shot, where only a handful of
- * top level names belong.
- */
+  const font = `500 ${FONT_PX}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  measure.font = font;
+  const w = Math.ceil(measure.measureText(text).width + PAD_X * 2);
+  const h = Math.ceil(FONT_PX + PAD_Y * 2);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  // Square cornered, to match the shell. The planet's version is a rounded pill
+  // because it belongs to a soft world; this one belongs to an instrument.
+  ctx.fillStyle = "rgba(26, 15, 10, 0.82)";
+  ctx.fillRect(0, 0, w, h);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(244, 87, 13, 0.35)";
+  ctx.strokeRect(1, 1, w - 2, h - 2);
+
+  ctx.font = font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(246, 236, 231, 0.92)";
+  ctx.fillText(text, w / 2, h / 2 + 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  texture.needsUpdate = true;
+
+  return { texture, aspect: w / h };
+}
+
 export function Anchor({
   id,
   text,
-  sub,
   overview = false,
   position = [0, 0, 0],
 }: {
   id: string;
   text: string;
+  /** Accepted and ignored; the card carries the detail. See the note above. */
   sub?: string;
   overview?: boolean;
   position?: [number, number, number];
 }) {
   const focus = useTransformerStore((s) => s.focus);
-  const ref = useRef<Object3D>(null);
+  const camera = useThree((s) => s.camera);
+  const ref = useRef<THREE.Sprite>(null);
+
   const zoomed = focus !== null && focus !== OVERVIEW_ID;
+  // Overview labels are for the whole-model shot and part labels are for when
+  // you have asked to look at that part. Showing both at once put seven names
+  // on the hero block at a distance where none of them were readable.
   const shown = overview ? !zoomed : zoomed;
 
-  useEffect(() => {
-    const object = ref.current;
-    if (!object || !shown) return;
-    const record: AnchorRecord = { id, text, sub, object };
-    anchors.push(record);
-    return () => {
-      const i = anchors.indexOf(record);
-      if (i >= 0) anchors.splice(i, 1);
-    };
-  }, [id, text, sub, shown]);
+  const built = useMemo(() => (shown ? build(text) : null), [text, shown]);
+  useEffect(() => () => built?.texture.dispose(), [built]);
 
-  return <object3D ref={ref} position={position} />;
+  const world = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame(() => {
+    const sprite = ref.current;
+    if (!sprite || !built) return;
+    // Same pixel height at any distance: the visible world height at a point is
+    // 2 * d * tan(fov/2), so asking for a fixed fraction of it means measuring
+    // d to THIS label rather than to the camera target.
+    sprite.getWorldPosition(world);
+    const d = world.distanceTo(camera.position);
+    const fov = (camera as THREE.PerspectiveCamera).fov ?? 40;
+    const h = 2 * d * Math.tan((fov * Math.PI) / 360) * SCREEN_FRACTION;
+    sprite.scale.set(h * built.aspect, h, 1);
+  });
+
+  if (!built) return null;
+
+  return (
+    <sprite ref={ref} position={position} renderOrder={20} name={id}>
+      {/* depthTest stays on, so a label behind geometry is correctly hidden by
+          it. That is the whole advantage over a projected DOM label, which
+          floats over everything and has to be decluttered by hand. */}
+      <spriteMaterial
+        map={built.texture}
+        transparent
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </sprite>
+  );
 }
