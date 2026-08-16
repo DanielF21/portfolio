@@ -7,6 +7,8 @@ import * as THREE from "three";
 import { OVERVIEW_ID } from "@/lib/transformer/glossary";
 import { useTransformerStore } from "@/lib/transformer/store";
 
+import { useScopePath } from "./scope";
+
 /**
  * A short name, drawn IN the world at the thing it names.
  *
@@ -37,6 +39,14 @@ import { useTransformerStore } from "@/lib/transformer/store";
  * shared: that one bakes the planet's blue pill and a sans face, and the two
  * pieces have opposite colour conventions on purpose.
  */
+
+/** True when `scope` is `focus` itself or exactly one dotted level below it. */
+function isSelfOrChild(focus: string, scope: string): boolean {
+  if (scope === "") return false;
+  if (scope === focus) return true;
+  if (!scope.startsWith(`${focus}.`)) return false;
+  return !scope.slice(focus.length + 1).includes(".");
+}
 
 const FONT_PX = 56;
 const PAD_X = 26;
@@ -105,43 +115,69 @@ export function Anchor({
   const camera = useThree((s) => s.camera);
   const ref = useRef<THREE.Sprite>(null);
 
+  const scope = useScopePath();
   const zoomed = focus !== null && focus !== OVERVIEW_ID;
-  // Overview labels are for the whole-model shot and part labels are for when
-  // you have asked to look at that part. Showing both at once put seven names
-  // on the hero block at a distance where none of them were readable.
-  const shown = overview ? !zoomed : zoomed;
+
+  // ONE LEVEL DOWN, NEVER MORE. A label shows when its scope IS the focus or is
+  // a direct child of it, so looking at a block names its stations and looking
+  // at a station names its tensors.
+  //
+  // The rule this replaces was just "am I zoomed in at all", which meant every
+  // part label in the open block was on screen at once: measured, fifteen of
+  // them stacked into an unreadable pile in the middle of the "One block" shot,
+  // which is the exact failure the deleted DOM declutter pass existed to
+  // manage. Gating by depth removes the need to manage it.
+  const shown = overview
+    ? !zoomed
+    : zoomed && focus !== null && isSelfOrChild(focus, scope);
 
   const built = useMemo(() => (shown ? build(text) : null), [text, shown]);
   useEffect(() => () => built?.texture.dispose(), [built]);
 
+  const groupRef = useRef<THREE.Group>(null);
   const world = useMemo(() => new THREE.Vector3(), []);
+  const toward = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(() => {
     const sprite = ref.current;
-    if (!sprite || !built) return;
+    const group = groupRef.current;
+    if (!sprite || !group || !built) return;
+
     // Same pixel height at any distance: the visible world height at a point is
     // 2 * d * tan(fov/2), so asking for a fixed fraction of it means measuring
     // d to THIS label rather than to the camera target.
-    sprite.getWorldPosition(world);
+    group.getWorldPosition(world);
     const d = world.distanceTo(camera.position);
     const fov = (camera as THREE.PerspectiveCamera).fov ?? 40;
     const h = 2 * d * Math.tan((fov * Math.PI) / 360) * SCREEN_FRACTION;
     sprite.scale.set(h * built.aspect, h, 1);
+
+    // LIFT IT OFF THE SURFACE IT NAMES. Anchors are placed on the edge of the
+    // thing they label, so a sprite centred exactly there is half inside it and
+    // depth testing eats the buried half: "Q projection" rendered as "ection".
+    // Nudging toward the camera keeps correct occlusion by everything ELSE in
+    // the scene while never being clipped by its own subject.
+    toward.copy(camera.position);
+    group.worldToLocal(toward);
+    const len = toward.length();
+    if (len > 1e-4) sprite.position.copy(toward).multiplyScalar(Math.min(1, (h * 0.9) / len));
   });
 
   if (!built) return null;
 
   return (
-    <sprite ref={ref} position={position} renderOrder={20} name={id}>
-      {/* depthTest stays on, so a label behind geometry is correctly hidden by
-          it. That is the whole advantage over a projected DOM label, which
-          floats over everything and has to be decluttered by hand. */}
-      <spriteMaterial
-        map={built.texture}
-        transparent
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </sprite>
+    <group ref={groupRef} position={position}>
+      <sprite ref={ref} renderOrder={20} name={id}>
+        {/* depthTest stays on, so a label behind geometry is correctly hidden by
+            it. That is the whole advantage over a projected DOM label, which
+            floats over everything and has to be decluttered by hand. */}
+        <spriteMaterial
+          map={built.texture}
+          transparent
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </sprite>
+    </group>
   );
 }

@@ -24,6 +24,7 @@ import { Embedding } from "./embedding";
 import { KvCache } from "./kv-cache";
 import { Logits } from "./logits";
 import { Residual } from "./residual";
+import { Scope } from "./scope";
 
 /**
  * The stack of blocks, at three levels of detail.
@@ -156,8 +157,17 @@ export function Stack() {
 
       {/* The cache is not part of the forward pass geometry: it is what
           survives between passes. It gets its own view rather than a place in
-          the line of stations. */}
-      {focus === "kv" && <KvCache />}
+          the line of stations.
+
+          Wrapped in a Scope even though the `focus === "kv"` test already gates
+          it, because `Anchor` reads its scope path from that context to decide
+          whether it is one level below the focus. Without the wrapper its
+          labels sit at the root path and never show. */}
+      {focus === "kv" && (
+        <Scope id="kv">
+          <KvCache />
+        </Scope>
+      )}
 
       {/* Only once you have asked for a block. At the overview the hero is a
           plate like the other 27; see `tierFor`. */}

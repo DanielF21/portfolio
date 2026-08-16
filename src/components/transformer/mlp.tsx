@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react";
 
 import { CONFIG } from "@/lib/transformer/config";
-import { formatCount, formatPercent, formatShape } from "@/lib/transformer/format";
+import { formatCount, formatShape } from "@/lib/transformer/format";
 import {
   BLOCK_BASELINE,
   MLP_DEPTH,
@@ -13,7 +13,7 @@ import {
   WIDTHS,
   heightFor,
 } from "@/lib/transformer/layout";
-import { DERIVED, nodeById, totalParamsOf } from "@/lib/transformer/model";
+import { nodeById, totalParamsOf } from "@/lib/transformer/model";
 import { WEIGHT_DIM } from "@/lib/transformer/theme";
 
 import { Anchor } from "./anchor";
@@ -148,6 +148,13 @@ export function Mlp() {
         position={[0, y(hInter), z.down]}
       />
 
+      {/* Four labels, placed on four different sides.
+          IN-WORLD LABELS DO NOT DECLUTTER THEMSELVES the way the deleted DOM
+          pool did, which is the price of them being occluded correctly and
+          never drifting. The whole cost of that is having to place them apart
+          by hand, and this station is where it shows: gate and up are the same
+          shape at the same height, so anchoring both to the left edge stacked
+          "Up projection" straight on top of "Intermediate". */}
       <Anchor
         id="mlp.gate"
         text={label("block.mlp.gate")}
@@ -165,21 +172,13 @@ export function Mlp() {
         text="Intermediate"
         // The widest thing in the model, and the reason the block bulges.
         sub={`${SEQ_TOKENS} × ${intermediateSize.toLocaleString("en-US")}`}
-        position={[-wide / 2, y(SEQ_HEIGHT), z.act]}
+        position={[0, BLOCK_BASELINE - 0.9, z.act]}
       />
       <Anchor
         id="mlp.down"
         text={label("block.mlp.down")}
         sub={shapeOf("block.mlp.down")}
         position={[narrow / 2, BLOCK_BASELINE + hInter, z.down]}
-      />
-      <Anchor
-        id="mlp.share"
-        text="SwiGLU MLP"
-        sub={`${formatCount(totalParamsOf("block.mlp"))} params · ${formatPercent(
-          DERIVED.mlpShareOfModel
-        )} of the model`}
-        position={[-wide / 2, BLOCK_BASELINE + hIn * 1.4, z.act]}
       />
 
       <mesh geometry={narrowAgain} position={[0, y(lip), z.narrow]}>

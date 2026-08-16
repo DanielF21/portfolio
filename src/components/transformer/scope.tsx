@@ -1,9 +1,25 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
 import { visibleUnder } from "@/lib/transformer/glossary";
 import { useTransformerStore } from "@/lib/transformer/store";
+
+/**
+ * The scope path a subtree sits in.
+ *
+ * Exists so an `Anchor` can know what it belongs to without being told. Labels
+ * need to appear one level down from whatever you are looking at (looking at a
+ * block names its stations, looking at a station names its tensors), and the
+ * alternative to reading it from the tree is a `level` prop on all twenty-three
+ * call sites that would then have to be kept in step with where the component
+ * is actually mounted.
+ */
+const ScopeContext = createContext<string>("");
+
+export function useScopePath(): string {
+  return useContext(ScopeContext);
+}
 
 /**
  * Draws its children only when they are in scope for the current focus.
@@ -27,5 +43,9 @@ export function Scope({
 }) {
   const focus = useTransformerStore((s) => s.focus);
   if (!visibleUnder(focus, id)) return null;
-  return <group position={position ?? [0, 0, 0]}>{children}</group>;
+  return (
+    <ScopeContext.Provider value={id}>
+      <group position={position ?? [0, 0, 0]}>{children}</group>
+    </ScopeContext.Provider>
+  );
 }

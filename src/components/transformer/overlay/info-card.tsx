@@ -108,10 +108,18 @@ export function InfoCard() {
             className="mt-2 font-mono text-[10px] leading-4"
             style={{ color: TEXT_MUTED }}
           >
-            {perLayer ? (
+            {/* A GROUP HAS NO PARAMETERS OF ITS OWN. Its count lives in its
+                children, so `node.params` is 0 and the per-layer phrasing
+                rendered "0 per layer · 1.31B across 28 layers", which reads as
+                a bug even though both halves are true of different things. */}
+            {perLayer && node.params > 0 ? (
               <>
                 {formatInt(node.params)} per layer · {formatCount(total)} across{" "}
                 {CONFIG.numHiddenLayers} layers
+              </>
+            ) : perLayer ? (
+              <>
+                {formatCount(total)} across {CONFIG.numHiddenLayers} layers
               </>
             ) : (
               <>{formatCount(total)} params</>

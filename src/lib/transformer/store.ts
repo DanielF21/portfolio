@@ -69,6 +69,21 @@ export const useTransformerStore = create<TransformerState>((set, get) => ({
 
   setFocus: (focus) => {
     if (get().focus === focus) return;
+
+    // ARRIVING AT THE CACHE SHOWS A CACHE. It used to open at `tokens: 0`,
+    // which drew an empty rectangle and a caption reading "0 tokens cached ·
+    // 0 B", so the one view whose whole subject is how much memory this costs
+    // opened by showing none of it. You had to find and press a button before
+    // the view had any content, and nothing on screen said so.
+    //
+    // Seeding to the prompt length means you land on the filled grid: 28 layers
+    // by 12 tokens, one cell per KiB. Clear and re-run are still there for the
+    // rhythm difference between prefill and decode, which is what the toggle is
+    // actually for.
+    if (focus === "kv" && get().mode === "prefill" && get().tokens === 0) {
+      set({ focus, tokens: PROMPT_TOKENS });
+      return;
+    }
     set({ focus });
   },
   setLayer: (i) => {

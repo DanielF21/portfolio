@@ -5,6 +5,7 @@ import {
   BRANCH_Y,
   CONDUIT_H,
   CONDUIT_W,
+  EXPLODED_DEPTH,
   stackZRange,
 } from "@/lib/transformer/layout";
 import { useTransformerStore } from "@/lib/transformer/store";
@@ -39,11 +40,27 @@ export function Residual() {
   // Overshoot both ends: the stream arrives from the embedding and leaves for
   // the final norm, so it must not look like it starts at block 0.
   const pad = 1.6;
-  const length = zMax - zMin + pad * 2;
-  const centre = (zMin + zMax) / 2;
+  const whole = focus === null || focus === OVERVIEW_ID;
+
+  // INSIDE ONE BLOCK, ONLY THE RUN THROUGH IT. The full stream is 41 units and
+  // the open block is 9, so drawing all of it at block focus put a bright bar
+  // diagonally across the frame and out of both corners, competing with the
+  // subject and pulling the eye off it. What the block view needs from the
+  // stream is that it arrives, is read, is added to, and leaves; a local run
+  // says all of that. The overview is where its full length means something.
+  const length = whole ? zMax - zMin + pad * 2 : EXPLODED_DEPTH + pad * 2;
+  const centre = whole ? (zMin + zMax) / 2 : 0;
 
   return (
-    <mesh position={[0, 0, centre]}>
+    <mesh
+      position={[0, 0, centre]}
+      // Never part of a subject's bounding box. It runs the whole length of the
+      // model, so `auto-frame` measuring it means every shot that includes it
+      // frames 41 units of conduit: "One block" backed off to 78 units for a
+      // block 9 units deep, and the block became a speck. It is context that
+      // spans the scene, like the ground plane, not a thing you look at.
+      userData={{ noFit: true }}
+    >
       <boxGeometry args={[CONDUIT_W, CONDUIT_H, length]} />
       {/* Emissive kept low. This runs the entire length of the model, so it is
           the largest single surface in the scene and anything bright enough to
