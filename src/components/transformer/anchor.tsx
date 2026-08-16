@@ -40,13 +40,6 @@ import { useScopePath } from "./scope";
  * pieces have opposite colour conventions on purpose.
  */
 
-/** True when `scope` is `focus` itself or exactly one dotted level below it. */
-function isSelfOrChild(focus: string, scope: string): boolean {
-  if (scope === "") return false;
-  if (scope === focus) return true;
-  if (!scope.startsWith(`${focus}.`)) return false;
-  return !scope.slice(focus.length + 1).includes(".");
-}
 
 const FONT_PX = 56;
 const PAD_X = 26;
@@ -118,18 +111,21 @@ export function Anchor({
   const scope = useScopePath();
   const zoomed = focus !== null && focus !== OVERVIEW_ID;
 
-  // ONE LEVEL DOWN, NEVER MORE. A label shows when its scope IS the focus or is
-  // a direct child of it, so looking at a block names its stations and looking
-  // at a station names its tensors.
+  // EXACTLY THE LEVEL YOU ARE AT, AND NOTHING ELSE. A label shows only when its
+  // scope IS the focus, so the projections are named at "Q, K, V projections"
+  // and nowhere else.
   //
-  // The rule this replaces was just "am I zoomed in at all", which meant every
-  // part label in the open block was on screen at once: measured, fifteen of
-  // them stacked into an unreadable pile in the middle of the "One block" shot,
-  // which is the exact failure the deleted DOM declutter pass existed to
-  // manage. Gating by depth removes the need to manage it.
-  const shown = overview
-    ? !zoomed
-    : zoomed && focus !== null && isSelfOrChild(focus, scope);
+  // Two rules were tried before this. "Am I zoomed in at all" put every part
+  // label in the open block on screen together: fifteen of them stacked into an
+  // unreadable pile in the middle of the "One block" shot. Widening to "or one
+  // level down" fixed that shot and broke "Attention", which has five
+  // sub-stations carrying twelve labels between them.
+  //
+  // Both attempts were trying to work out how many labels a shot can hold. The
+  // answer is that a group view does not need in-world labels at all: the index
+  // lists what is inside it, the card names what the cursor is on, and the
+  // status bar says where you are. Naming things twice was the whole problem.
+  const shown = overview ? !zoomed : zoomed && scope !== "" && scope === focus;
 
   const built = useMemo(() => (shown ? build(text) : null), [text, shown]);
   useEffect(() => () => built?.texture.dispose(), [built]);

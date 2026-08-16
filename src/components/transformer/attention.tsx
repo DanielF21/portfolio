@@ -260,17 +260,24 @@ export function Attention() {
             roughness={0.7}
           />
         </mesh>
+        {/* Both below their row, in the gap the fan leaves.
+            Not off the right ends: the two rows span the full width of the shot
+            by design (that span IS the 6:1 reading), so a label anchored to
+            either right edge starts at the frame edge and runs out of it. And
+            not above the query row either, because the fit measures geometry
+            and sprites are excluded from it, so a label placed outside the
+            geometry's bounding box is outside the frame. */}
         <Anchor
           id="qheads"
           text={`${nQ} query heads`}
           sub={`${headDim} each`}
-          position={[Q_SPAN / 2, Y_Q, 0]}
+          position={[0, Y_Q - SLICE_H, 0]}
         />
         <Anchor
           id="kvheads"
           text={`${nKV} key/value heads`}
           sub={`shared ${groupSize} ways`}
-          position={[KV_SPAN / 2, Y_KV, 0]}
+          position={[0, Y_KV - SLICE_H, 0]}
         />
       </Scope>
 

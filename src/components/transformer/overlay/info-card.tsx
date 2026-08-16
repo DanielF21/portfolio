@@ -130,6 +130,23 @@ export function InfoCard() {
           </div>
         )}
 
+        {/* THE ONE PLACE THE AREA RULE DOES NOT HOLD, SAID OUT LOUD.
+            Every weight matrix is drawn with its on-screen area equal to its
+            parameter count. A one dimensional weight has no second axis to
+            scale, so it is drawn at MIN_AXIS and is necessarily far larger than
+            its share. The slab carries a bright outline to mark it; this is the
+            sentence that explains what the outline means. An overstatement a
+            reader can see is honest, and one they cannot is not. */}
+        {node && node.kind === "weight" && node.shape.length < 2 && (
+          <div
+            className="mt-2 font-mono text-[10px] leading-4"
+            style={{ color: accent(0.75) }}
+          >
+            Outlined because it is drawn larger than scale. Area is parameter
+            count everywhere else; a vector this size would be a hairline.
+          </div>
+        )}
+
         {node?.tiedTo && (
           <div
             className="mt-2 font-mono text-[10px] leading-4"
