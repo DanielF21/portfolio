@@ -1,7 +1,7 @@
 # dsf-portfolio
 
-Next 14 App Router portfolio. Most of it is ordinary; the planet is not, and
-almost everything below is about the planet.
+Next 14 App Router portfolio. Most of it is ordinary. Two things are not: the
+planet, and the transformer, and almost everything below is about those two.
 
 ## Verifying changes
 
@@ -304,6 +304,107 @@ A backgrounded Chrome tab throttles `requestAnimationFrame`, so the render loop
 only advances when a screenshot forces a frame, and `await requestAnimationFrame`
 hangs outright. Drive the simulation with `__planetSetPos` plus synthetic
 `KeyboardEvent`s, and step frames by taking screenshots.
+
+## The transformer
+
+An orbitable Qwen2.5-1.5B at `/things/transformer`, same immersive stage pattern
+as the planet. Three-free rule applies identically: nothing in
+`src/lib/transformer/` or `src/components/transformer/overlay/` may import
+`three`.
+
+### Every number is derived
+
+`config.ts` holds the real `config.json` and nothing else. `model.ts` turns it
+into a graph of named tensors and computes every shape, parameter count and byte
+figure from it. Labels, the inspector and the geometry all read that one source,
+so a label cannot disagree with the box beside it.
+
+Nothing is hard-coded that could be derived, and nothing is invented. Check:
+non-embedding params come out at 1.31B, which is what Qwen's own model card
+publishes, so the biases and the tied embedding are being counted correctly.
+
+**The colour convention is the OPPOSITE of the planet's.** Every colour here is
+an sRGB hex string and goes through R3F's colour management. The planet writes
+linear values into vertex colours. Both are internally consistent; mixing them
+is the bug. Never hand-write a linear vertex colour in this scene.
+
+### Width is proportional to the real dimension
+
+`layout.widthFor` is the only way a tensor dimension becomes world units, which
+is why the MLP is 5.83x the stream on screen and K/V are exactly 1/6 of Q. Two
+documented departures, both deliberate and both commented at the constant:
+
+- **`CONDUIT_W`**: the long run of residual stream between blocks is schematic.
+  At true section a 40-unit bar has more surface area than everything else
+  combined and renders as a girder with small dark fins attached. The comparison
+  that matters is local, and the MLP taper still starts at the true width.
+- **The vocabulary axis** is 297 units against a 3 unit stream, so the embedding
+  wall is drawn with a VISIBLE break and the true count on the label. A silent
+  squash would make 151,936 rows look like a few dozen.
+
+### Isolation is load bearing, not cosmetic
+
+The stations sit in a line along Z, so a square view of any one of them looks
+straight through every other one, and the views that most need a square angle
+(Q against K/V, the causal mask staircase) are exactly the blocked ones.
+
+`glossary.visibleUnder` is the whole rule: while `focus` is set, a thing is drawn
+when its scope path is a prefix of the focus or the focus is a prefix of it.
+Ancestors and descendants stay, siblings go. **Three separate things had to be
+hidden**, each only discovered by fixing the one before it: sibling stations, the
+neighbouring block plates (the open block is 9.4 units and its neighbour sits
+just outside, so any camera far enough back has five plates in front of it), and
+the stream conduit, which from a near-axis camera is seen end on and becomes a
+column through the middle of the shot.
+
+### Blocks branch off the stream
+
+They do not enclose it. Two earlier attempts ran the stream through the middle
+of each block and both failed the same way: invisible everywhere except its own
+end cap. Branching is also the truth, since a block reads the stream, computes
+aside, and adds back.
+
+### Grids are a shader, cells are not
+
+`grid-material.ts` draws a tensor's cell grid in the fragment shader, so every
+tensor is ONE draw call and stays sharp at any zoom. Two levels are drawn, the
+real grid and one ten times coarser, and **each fades on its own density**. That
+fade is not optional: the line test measures distance in pixels, so once cells go
+sub-pixel it returns a strong value everywhere and dense tensors render
+*brighter*, which reads as a paler object rather than a denser one.
+
+Real per-cell instancing is used in exactly one place, `scores.tsx`, because
+there the cells are the subject: the causal mask is the upper triangle NOT BEING
+THERE, and only geometry can show an absence.
+
+### Budget
+
+52 draw calls in the worst view (the overview), 10,644 triangles. Every isolated
+station is under 25.
+
+### Dev hooks
+
+| Hook | What it does |
+|---|---|
+| `window.__transformer` | Per-frame readout: pose, focus, layer, hover |
+| `window.__transformerDraws` | Draw calls and triangles |
+| `window.__transformerPose(patch, snap = true)` | Nudge the camera; `snap` writes `current` too |
+| `window.__transformerLayer(n)` | Move the hero block |
+| `window.__transformerRender()` | Force one frame synchronously, return its cost |
+
+`__transformerRender` exists because a backgrounded tab never fires
+`requestAnimationFrame`, and **awaiting rAF there hangs the renderer for 45
+seconds**. Without it, measuring a draw-call budget costs one screenshot per
+view. Same trap the planet's testing note warns about.
+
+### The capture
+
+`scripts/capture-transformer.py` records one real forward pass to
+`public/things/transformer/capture.json`, which the score grid uses for real
+attention weights. It is NOT required and has not been run: it needs torch,
+transformers and a 3.1 GB model download. A missing capture is an ordinary state
+and the grid falls back to a flat triangle. **Never substitute an invented
+distribution for a missing one.**
 
 ## Potential next path: terrain elevation
 

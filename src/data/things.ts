@@ -69,6 +69,25 @@ export interface Thing {
 
 export const THINGS: readonly Thing[] = [
   {
+    slug: "transformer",
+    title: "Transformer",
+    blurb: "A decoder-only language model you can walk around.",
+    shipped: "2026-08-16",
+    hue: "indigo",
+    poster: { src: "/things/transformer/poster.png", width: 1600, height: 1000 },
+    stage: "immersive",
+    // Same reasoning as the planet's: three, R3F and this scene's geometry are
+    // far too much to pull onto an index page for decoration.
+    preview: "none",
+    weight: "heavy",
+    // The poster is a real screenshot now. This stays out of the featured slot
+    // only until the written explanation exists: the scene labels every tensor
+    // with its true shape but does not yet say why any of it is shaped that
+    // way. Delete this one line to promote it.
+    feature: false,
+    tech: ["Three.js", "React Three Fiber", "Qwen2.5", "PyTorch"],
+  },
+  {
     slug: "planet",
     title: "Planet",
     blurb: "A small world you can walk around.",

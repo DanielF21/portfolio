@@ -38,6 +38,10 @@ export const FULL: Record<string, ComponentType<any>> = {
     ssr: false,
     loading: () => null,
   }),
+  transformer: dynamic(
+    () => import("@/components/transformer/transformer-stage"),
+    { ssr: false, loading: () => null }
+  ),
 };
 
 /**
