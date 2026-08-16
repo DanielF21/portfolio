@@ -2,10 +2,19 @@
 
 import type { ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
+import * as THREE from "three";
 
 import { pointer } from "@/lib/transformer/input";
 import { useTransformerStore } from "@/lib/transformer/store";
-import { WEIGHT, WEIGHT_LINE, ACTIVATION, ACTIVATION_SOFT, CACHE, CACHE_DIM } from "@/lib/transformer/theme";
+import {
+  WEIGHT,
+  WEIGHT_LINE,
+  ACTIVATION,
+  ACTIVATION_SOFT,
+  CACHE,
+  CACHE_DIM,
+  OP_LINE,
+} from "@/lib/transformer/theme";
 
 import { createGridMaterial } from "./grid-material";
 
@@ -38,6 +47,15 @@ interface Props {
   kind?: SlabKind;
   /** Dim a slab that is context rather than subject. */
   faded?: boolean;
+  /**
+   * This slab is drawn LARGER than its true proportion, at `MIN_AXIS`.
+   *
+   * Sets the same hatched edge the embedding wall uses for its elided axis, so
+   * a floored slab announces that it is not to scale. Every other slab's area
+   * is its parameter count; this is the escape hatch for the tensors too small
+   * to draw, and it is only honest if it is visible.
+   */
+  floored?: boolean;
   /** `model.ts` node id. Supplying it makes the slab hoverable and puts its
    *  real shape, parameter count and byte cost in the inspector. */
   nodeId?: string;
@@ -51,6 +69,7 @@ export function TensorSlab({
   rotation = [0, 0, 0],
   kind = "weight",
   faded = false,
+  floored = false,
   nodeId,
 }: Props) {
   const [w, h, d] = size;
@@ -64,14 +83,14 @@ export function TensorSlab({
         // transposes every matrix in the scene, which is exactly the kind of
         // silent error this whole file exists to avoid.
         cells: [cols, rows],
-        faceSize: [w, h],
+        size: [w, h, d],
         lineColor: paint.line,
         lineOpacity: faded ? 0.35 : 0.9,
         roughness: paint.rough,
         transparent: faded,
         opacity: faded ? 0.45 : 1,
       }),
-    [cols, rows, w, h, paint.color, paint.line, paint.rough, faded]
+    [cols, rows, w, h, d, paint.color, paint.line, paint.rough, faded]
   );
 
   useEffect(() => () => material.dispose(), [material]);
@@ -96,6 +115,28 @@ export function TensorSlab({
     <mesh position={position} rotation={rotation} {...hoverProps}>
       <boxGeometry args={[w, h, d]} />
       <primitive object={material} attach="material" />
+      {/* A floored slab is drawn bigger than its parameter count warrants, so
+          it is outlined to read as a symbol rather than as a measurement. See
+          the `floored` prop. */}
+      {floored && <FloorMark w={w} h={h} d={d} />}
     </mesh>
+  );
+}
+
+/** The "not to scale" marker: a bright wire outline round a floored slab. */
+function FloorMark({ w, h, d }: { w: number; h: number; d: number }) {
+  const geometry = useMemo(() => {
+    const box = new THREE.BoxGeometry(w * 1.001, h * 1.001, d * 1.001);
+    const edges = new THREE.EdgesGeometry(box);
+    box.dispose();
+    return edges;
+  }, [w, h, d]);
+
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color={OP_LINE} transparent opacity={0.85} />
+    </lineSegments>
   );
 }

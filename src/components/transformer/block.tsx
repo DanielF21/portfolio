@@ -2,7 +2,14 @@
 
 import { CONFIG } from "@/lib/transformer/config";
 import { visibleUnder } from "@/lib/transformer/glossary";
-import { BLOCK_W, BRANCH_Y, STATIONS } from "@/lib/transformer/layout";
+import {
+  BLOCK_BASELINE,
+  BRANCH_Y,
+  MIN_AXIS,
+  SLAB_DEPTH,
+  STATIONS,
+  widthFor,
+} from "@/lib/transformer/layout";
 import { useTransformerStore } from "@/lib/transformer/store";
 
 import { Attention } from "./attention";
@@ -36,6 +43,20 @@ const { hiddenSize } = CONFIG;
  *
  * Drawn as a single thin bar rather than a full height plate, because it IS a
  * single row: 1536 numbers against the MLP's 13.8 million per matrix.
+ *
+ * THIS IS THE ONE PLACE THE AREA RULE HAS TO BE BROKEN, so it is broken loudly.
+ * Everywhere else a weight's on-screen area is its parameter count. A [1536]
+ * vector's true second axis is `heightFor(1)` = 0.002 units, which is sub-pixel
+ * at every distance and impossible to put a cursor on, so it is drawn at
+ * `MIN_AXIS` instead. That inflates it by roughly 80x, and the `floored` flag
+ * is what makes the slab say so: it draws with the same visible break the
+ * embedding wall uses for its elided axis, because an overstatement the viewer
+ * can see is honest and a silent one is not.
+ *
+ * The width was also wrong before this, and separately. It used `BLOCK_W` (4.2)
+ * for a 1,536 wide tensor where `widthFor(1536)` is 3.0, a 40% overstatement
+ * that violated `layout.ts`'s central rule with nothing in the codebase
+ * flagging it.
  */
 function RmsNorm({ nodeId }: { nodeId: string }) {
   return (
@@ -43,7 +64,9 @@ function RmsNorm({ nodeId }: { nodeId: string }) {
       nodeId={nodeId}
       rows={1}
       cols={hiddenSize}
-      size={[BLOCK_W, 0.38, 0.12]}
+      floored
+      size={[widthFor(hiddenSize), MIN_AXIS, SLAB_DEPTH]}
+      position={[0, BLOCK_BASELINE + MIN_AXIS / 2, 0]}
     />
   );
 }

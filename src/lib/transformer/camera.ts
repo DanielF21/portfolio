@@ -63,6 +63,41 @@ export const PHI_MAX = Math.PI - 0.08;
 export const DISTANCE_MIN = 1.2;
 export const DISTANCE_MAX = 220;
 
+/**
+ * How far back to stand so a subject of a given size fills `fill` of the frame.
+ *
+ * Pure trigonometry, no three, so it can live here next to the pose it produces.
+ * `halfW`, `halfH` are the subject's half extents on the screen's two axes,
+ * already resolved from its bounding box by whoever measured it.
+ *
+ * WHY DISTANCES ARE NO LONGER TYPED BY HAND. Every camera pose in the glossary
+ * used to carry a literal distance tuned against the geometry of the day. When
+ * tensor heights became real, all fourteen went wrong at once and in opposite
+ * directions: the output projection went from 11% of frame height to 67%, and
+ * the MLP went from 16% to 141%, overflowing. Tuning fourteen numbers by eye
+ * against geometry that is still moving is how a scene ends up with its
+ * geometry bent to suit its cameras, which is exactly the trade this piece
+ * cannot make. Measuring instead means a badly framed shot is impossible to
+ * ship and a new station cannot be added mis-framed.
+ *
+ * Both axes are fitted, and the larger requirement wins. Fitting only the
+ * height lets a wide subject run out of the sides, which is how the MLP (17.5
+ * units across) behaved.
+ */
+export function distanceFor(
+  halfW: number,
+  halfH: number,
+  aspect: number,
+  fov: number,
+  fill: number
+): number {
+  const halfFov = (fov * Math.PI) / 360;
+  // A horizontal half extent has to be divided by the aspect ratio before it
+  // can be compared against the same vertical half angle.
+  const need = Math.max(halfH, halfW / Math.max(aspect, 0.0001));
+  return clamp(need / Math.tan(halfFov) / fill, DISTANCE_MIN, DISTANCE_MAX);
+}
+
 /** How fast `current` chases `desired`, in e-folds per second. Higher is
  *  snappier. 5 lands a long flight in a bit under a second while still
  *  feeling damped rather than instant. */

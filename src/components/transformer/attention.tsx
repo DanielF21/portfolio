@@ -6,9 +6,13 @@ import * as THREE from "three";
 import { CONFIG } from "@/lib/transformer/config";
 import {
   ATTN_STATIONS,
+  BLOCK_BASELINE,
   HEAD_FILL,
+  QKV_PITCH,
   SCORES_SIZE,
   SEQ_TOKENS,
+  SLAB_DEPTH,
+  heightFor,
   widthFor,
 } from "@/lib/transformer/layout";
 import { formatCount, formatShape } from "@/lib/transformer/format";
@@ -48,6 +52,16 @@ const KV_SPAN = widthFor(kvDim);
 const Y_Q = 0.62;
 const Y_KV = -0.62;
 const SLICE_H = 0.42;
+
+/** Every projection reads the 1,536 wide stream, so every one is this tall. */
+const PLATE_H = heightFor(hiddenSize);
+
+/** Centre of the `i`th plate in the Q, K, V stack, counting down from the top
+ *  and standing the whole stack on the branch line. */
+function yOf(i: number): number {
+  const top = BLOCK_BASELINE + 2 * QKV_PITCH + PLATE_H / 2;
+  return top - i * QKV_PITCH;
+}
 
 /** Centre of head `k` in a row of `n` heads, in world units. */
 function headX(k: number, n: number): number {
@@ -187,36 +201,47 @@ export function Attention() {
 
   return (
     <group>
-      {/* The three projections, as a bar chart you can walk around. Equal
-          heights so the only thing that differs is width, which is the
-          only thing that differs in the model. */}
+      {/* The three projections, as a bar chart you can walk around.
+
+          Equal heights, and that is now a FACT rather than a drawing
+          convention: height is the input dimension and all three read the same
+          1,536 wide stream, so all three are exactly heightFor(1536) tall. The
+          only thing that differs is width, which is the output dimension, which
+          is the only thing that differs in the model. K and V are a sixth of Q's
+          width and therefore a sixth of its area, which is the whole of GQA in
+          one picture.
+
+          Stacked rather than side by side because comparing horizontal extents
+          against a shared left edge is what a reader can actually do; three bars
+          of differing WIDTH placed side by side is the same data drawn so it
+          cannot be read. */}
       <Scope id="block.attn.qkv" position={[0, 0, ATTN_STATIONS.qkv]}>
         <TensorSlab
           nodeId="block.attn.q"
           rows={hiddenSize}
           cols={nQ * headDim}
-          size={[Q_SPAN, 0.5, 0.16]}
-          position={[0, 0.72, 0]}
+          size={[Q_SPAN, PLATE_H, SLAB_DEPTH]}
+          position={[0, yOf(0), 0]}
         />
-        <Anchor id="q" text={q.text} sub={q.sub} position={[Q_SPAN / 2, 0.72, 0]} />
+        <Anchor id="q" text={q.text} sub={q.sub} position={[Q_SPAN / 2, yOf(0), 0]} />
 
         <TensorSlab
           nodeId="block.attn.k"
           rows={hiddenSize}
           cols={kvDim}
-          size={[KV_SPAN, 0.5, 0.16]}
-          position={[0, 0, 0]}
+          size={[KV_SPAN, PLATE_H, SLAB_DEPTH]}
+          position={[0, yOf(1), 0]}
         />
-        <Anchor id="k" text={k.text} sub={k.sub} position={[KV_SPAN / 2, 0, 0]} />
+        <Anchor id="k" text={k.text} sub={k.sub} position={[KV_SPAN / 2, yOf(1), 0]} />
 
         <TensorSlab
           nodeId="block.attn.v"
           rows={hiddenSize}
           cols={kvDim}
-          size={[KV_SPAN, 0.5, 0.16]}
-          position={[0, -0.72, 0]}
+          size={[KV_SPAN, PLATE_H, SLAB_DEPTH]}
+          position={[0, yOf(2), 0]}
         />
-        <Anchor id="v" text={v.text} sub={v.sub} position={[KV_SPAN / 2, -0.72, 0]} />
+        <Anchor id="v" text={v.text} sub={v.sub} position={[KV_SPAN / 2, yOf(2), 0]} />
       </Scope>
 
       {/* Position, applied as rotation, between projecting and splitting. */}
@@ -261,13 +286,22 @@ export function Attention() {
       </Scope>
 
       <Scope id="block.attn.out" position={[0, 0, ATTN_STATIONS.out]}>
+        {/* 1536 in, 1536 out, so a square: the same area as Q, which is the
+            same parameter count. It used to be a 3.0 x 0.5 bar, which left 96%
+            of its frame empty and understated it against the MLP. */}
         <TensorSlab
           nodeId="block.attn.o"
           rows={nQ * headDim}
           cols={hiddenSize}
-          size={[Q_SPAN, 0.5, 0.16]}
+          size={[Q_SPAN, PLATE_H, SLAB_DEPTH]}
+          position={[0, BLOCK_BASELINE + PLATE_H / 2, 0]}
         />
-        <Anchor id="o" text={o.text} sub={o.sub} position={[Q_SPAN / 2, 0, 0]} />
+        <Anchor
+          id="o"
+          text={o.text}
+          sub={o.sub}
+          position={[Q_SPAN / 2, BLOCK_BASELINE + PLATE_H / 2, 0]}
+        />
       </Scope>
     </group>
   );

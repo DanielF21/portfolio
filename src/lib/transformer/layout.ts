@@ -35,10 +35,78 @@ export function widthFor(dim: number): number {
   return dim * WIDTH_SCALE;
 }
 
+/**
+ * Turn a real tensor dimension into a world height.
+ *
+ * The same scale as `widthFor`, deliberately, and that is the whole point: when
+ * BOTH axes of a weight matrix go through one scale, the slab's on-screen AREA
+ * becomes proportional to its parameter count, because `area = widthFor(out) *
+ * heightFor(in) = out * in * WIDTH_SCALE^2` and `params = in * out`. One
+ * constant, no tuning, and the MLP's dominance stops being a caption.
+ *
+ * Before this existed, height was an arbitrary 0.38 to 0.72 and only width
+ * carried meaning.
+ *
+ * WHICH AXIS IS WHICH. `tensor-slab` maps columns across the face and rows up
+ * it, and every caller passes `rows = the INPUT dim, cols = the OUTPUT dim`. So
+ * width is the output dim and height is the input dim, not the other way round.
+ * Getting this backwards transposes every matrix in the scene and, worse, turns
+ * the Q/K/V comparison from a width comparison into a height one, which is
+ * exactly the reading its camera pose exists to make.
+ */
+export function heightFor(dim: number): number {
+  return dim * WIDTH_SCALE;
+}
+
+/**
+ * Thickness of every weight slab.
+ *
+ * One constant rather than the 0.16-here-0.12-there it replaced. Once slabs are
+ * bevelled and lit the eye reads VOLUME rather than area, so a shared depth is
+ * what makes volume-proportionality follow from area-proportionality for free.
+ */
+export const SLAB_DEPTH = 0.16;
+
+/**
+ * Below this many world units an axis is drawn at the floor and MARKED.
+ *
+ * The mirror of `ELIDE_ABOVE`, and it exists because area proportionality has a
+ * bottom end as well as a top one. RMSNorm is a 1,536 element vector, so its
+ * second axis is `heightFor(1) = 0.002` units: sub-pixel everywhere and
+ * impossible to hover. Drawing it at a usable size is unavoidable.
+ *
+ * What is avoidable is doing that silently. The old code drew RMSNorm at 4.2 x
+ * 0.38, which under an area rule reads as roughly 418,000 parameters against an
+ * actual 1,536, a 270x overstatement with nothing on screen to say so. A floor
+ * that is drawn with the same visible break the embedding wall uses is honest;
+ * the same floor drawn as an ordinary slab is not.
+ */
+export const MIN_AXIS = 0.16;
+
+export function needsFloor(dim: number): boolean {
+  return widthFor(dim) < MIN_AXIS;
+}
+
 /** Above this many world units a tensor is drawn elided rather than whole.
  *  Sized so the MLP (17.5 units) stays real and only the vocabulary axis
  *  breaks. */
 export const ELIDE_ABOVE = 40;
+
+// ----------------------------------------------------------------- ground
+
+/**
+ * Y of the ground plane the model stands on.
+ *
+ * The ground is not decoration. Without it every object floats in an unbounded
+ * void, which is most of what made the empty parts of the frame read as nothing
+ * rather than as space; a grid under the model turns the same pixels into a
+ * workbench. It also gives the eye a horizontal to measure the model's height
+ * against, which matters now that height carries meaning.
+ *
+ * Sits below the stream rather than at it, so the stream is visibly suspended
+ * and the two never z-fight.
+ */
+export const GROUND_Y = -3.2;
 
 export function needsElision(dim: number): boolean {
   return widthFor(dim) > ELIDE_ABOVE;
@@ -80,9 +148,31 @@ export const SEQ_HEIGHT = 2.0;
 export const BRANCH_Y = 2.5;
 
 /** Cross section of a collapsed block, on the branch. Not proportional to
- *  anything: a block's world extent never was. */
+ *  anything: a block's world extent never was.
+ *
+ *  `BLOCK_H` was 2.6 when every weight inside a block was a 0.38 to 0.72 unit
+ *  bar. Now that heights are real and the tallest weight in a block stands 17.5
+ *  units, a 2.6 plate reads as a wafer next to the one block that is open, and
+ *  the stack looks like a flat plain with a single spire on it. Five is a
+ *  summary of the block rather than a contradiction of it. */
 export const BLOCK_W = 4.2;
-export const BLOCK_H = 2.6;
+export const BLOCK_H = 5.0;
+
+/**
+ * Everything in a block is BOTTOM ALIGNED ON THE BRANCH, growing upward.
+ *
+ * One rule, enforced everywhere, and it exists because heights are now real and
+ * wildly unequal: `down` is 17.5 units and `gate` is 3.0. Centring both on the
+ * branch would sink `down` 8.75 units below it, through the residual stream at
+ * y=0 and out the bottom of the ground plane at y=-3.2. Centring only the tall
+ * ones is worse, because then half the tensors sit on a line and half straddle
+ * it and no reading of the picture is consistent.
+ *
+ * Growing upward from a common baseline also makes the branch read as the floor
+ * the machinery stands on, which is what it is: the block's parts all read the
+ * stream from the same place.
+ */
+export const BLOCK_BASELINE = 0;
 
 /**
  * Cross section of the long run of stream between blocks.
@@ -192,6 +282,20 @@ export const SCORES_SIZE = 2.6;
  *  between them. The slice CENTRES stay exact, so the group's total extent is
  *  still the true width of the projection. */
 export const HEAD_FILL = 0.72;
+
+/**
+ * Vertical pitch of the Q, K and V plates.
+ *
+ * They all have the same INPUT dimension, so under real heights they are all
+ * exactly `heightFor(1536)` = 3.0 tall and the only thing that differs between
+ * them is width. That is the bar chart the view exists to be, and it is now true
+ * rather than a drawing convention: equal height because equal input, different
+ * width because different output.
+ *
+ * The pitch has to clear that height or the plates interpenetrate. It used to be
+ * 0.72 against a 0.5 height.
+ */
+export const QKV_PITCH = heightFor(CONFIG.hiddenSize) + 0.34;
 
 // ------------------------------------------------------------------ tiers
 

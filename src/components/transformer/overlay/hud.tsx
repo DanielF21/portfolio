@@ -2,10 +2,10 @@
 
 import { CONFIG } from "@/lib/transformer/config";
 import { formatBytes, formatCount } from "@/lib/transformer/format";
-import { INDEX, OVERVIEW_ID } from "@/lib/transformer/glossary";
+import { OVERVIEW_ID } from "@/lib/transformer/glossary";
 import { DERIVED } from "@/lib/transformer/model";
 import { useTransformerStore } from "@/lib/transformer/store";
-import { view } from "@/lib/transformer/view";
+import { requestRefit } from "@/lib/transformer/view";
 
 import { IndexPanel } from "./index-panel";
 import { Inspector } from "./inspector";
@@ -44,7 +44,7 @@ export function Hud({ onExit }: Props) {
 
   const home = () => {
     setFocus(null);
-    view.desired = INDEX[0].pose;
+    requestRefit();
   };
 
   return (

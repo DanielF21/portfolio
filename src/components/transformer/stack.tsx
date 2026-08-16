@@ -65,7 +65,9 @@ export function Stack() {
 
     for (let i = 0; i < N; i++) {
       const tier = tierFor(i, layer);
-      dummy.position.set(0, BRANCH_Y, blockZ(i, layer));
+      // Standing ON the branch, not straddling it, so a collapsed block occupies
+      // the same envelope the open one grows into. See `BLOCK_BASELINE`.
+      dummy.position.set(0, BRANCH_Y + BLOCK_H / 2, blockZ(i, layer));
       dummy.rotation.set(0, 0, 0);
       // A zero scale is how a slot opts out. Scaling to zero collapses the box
       // to a point, which draws nothing and costs one skipped instance.
@@ -99,7 +101,7 @@ export function Stack() {
       {(isolated ? [] : Array.from({ length: N }, (_, i) => i))
         .filter((i) => tierFor(i, layer) === "solid")
         .map((i) => (
-          <mesh key={i} position={[0, BRANCH_Y, blockZ(i, layer)]}>
+          <mesh key={i} position={[0, BRANCH_Y + BLOCK_H / 2, blockZ(i, layer)]}>
             <boxGeometry args={[BLOCK_W, BLOCK_H, BLOCK_PITCH * 0.62]} />
             <meshStandardMaterial color={WEIGHT} roughness={0.8} metalness={0} />
           </mesh>

@@ -1,17 +1,56 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
+import type * as THREE from "three";
 
-import { CAM_FAR, CAM_NEAR, BACKGROUND } from "@/lib/transformer/theme";
+import {
+  CAM_FAR,
+  CAM_NEAR,
+  BACKGROUND,
+  FOG_FAR,
+  FOG_NEAR,
+} from "@/lib/transformer/theme";
 import { DEFAULT_POSE } from "@/lib/transformer/camera";
 import { attachControls } from "@/lib/transformer/input";
 
+import { AutoFrame } from "./auto-frame";
 import { CameraRig } from "./camera-rig";
 import { DevHooks } from "./dev-hooks";
+import { Ground } from "./ground";
 import { LabelTracker } from "./label-tracker";
 import { ReadySignal } from "./ready-signal";
 import { Stack } from "./stack";
+
+/**
+ * A back light that rides the camera.
+ *
+ * Weights are drawn only a little brighter than the background now, on purpose,
+ * so they read by silhouette the way the reference's module does. That only
+ * works if there IS a silhouette, and a fixed back light stops producing one as
+ * soon as you orbit past it. Placing the light opposite the camera each frame
+ * means every slab keeps a lit edge from every angle.
+ *
+ * Lives in the render loop rather than in React state for the usual reason: the
+ * camera moves every frame and nothing about that should re-render a component.
+ */
+function RimLight() {
+  const ref = useRef<THREE.DirectionalLight>(null);
+
+  useFrame(({ camera }) => {
+    const light = ref.current;
+    if (!light) return;
+    // Directly behind the subject from where the camera stands, lifted so the
+    // edge it draws runs along the top of a slab rather than round its middle.
+    light.position.set(
+      -camera.position.x,
+      Math.abs(camera.position.y) + 6,
+      -camera.position.z
+    );
+  });
+
+  return <directionalLight ref={ref} intensity={1.35} color="#ffd9c2" />;
+}
 
 /**
  * The <Canvas>, and the only module in the piece that may import three
@@ -99,17 +138,40 @@ export default function Scene({ lowPower, onContextLost }: Props) {
         }}
       >
         <color attach="background" args={[BACKGROUND]} />
+        {/* Depth cueing. The model runs tens of units deep and every block is
+            identical, so without this the far end of the stack is lit exactly
+            like the near end and the eye has nothing to order them by. Fog
+            colour is the background, so geometry recedes into the field rather
+            than into a visible haze. */}
+        <fog attach="fog" args={[BACKGROUND, FOG_NEAR, FOG_FAR]} />
 
-        {/* Deliberately plain lighting. This is a technical drawing, not a
-            world: one key to give the slabs a readable edge, one fill so the
-            unlit sides do not go to black, and nothing else. Shadows would
-            only make the stack harder to read. */}
-        <ambientLight intensity={0.85} />
-        <directionalLight position={[6, 10, 14]} intensity={1.5} />
-        <directionalLight position={[-8, -4, -10]} intensity={0.45} />
+        {/*
+          THE OLD RIG WAS ambient 0.85 AGAINST A KEY OF 1.5, which put the
+          darkest face of every box at 57% of its lit face. Boxes lit that flatly
+          have no readable form: the silhouette is the only thing separating one
+          from another, and 28 identical silhouettes in a row is a grey wall.
+          That single ratio was the largest cause of "everything looks blocky".
+
+          What replaces it is a portrait rig, not a room. Ambient drops to a
+          fifth so faces actually differ, a hemisphere gives a vertical gradient
+          instead of a constant so horizontal surfaces separate from vertical
+          ones, and a rim light rides the camera to draw the edge every slab
+          needs against a background it is only a little brighter than.
+        */}
+        <ambientLight intensity={0.18} />
+        <hemisphereLight args={["#6a5347", "#0d0806", 0.5]} />
+        <directionalLight position={[7, 12, 9]} intensity={2.1} />
+        {/* Fill from the opposite side, weak. Enough that a face turned away
+            from the key is dark rather than absent. */}
+        <directionalLight position={[-9, -2, -7]} intensity={0.32} />
+        <RimLight />
 
         <CameraRig />
+        <Ground />
         <Stack />
+        {/* After Stack, so the scope groups for the current focus are already
+            in the graph when it measures them. */}
+        <AutoFrame />
         {/* After Stack, so anchors mounted this commit are already registered
             when the tracker's first frame runs. */}
         <LabelTracker />

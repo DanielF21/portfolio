@@ -57,7 +57,18 @@ export const view = {
    *  the DOM itself every frame. */
   width: 0,
   height: 0,
+
+  /** Bumped to ask `auto-frame` to re-measure and re-frame the current scope.
+   *  A counter rather than a boolean so two requests in one frame cannot cancel
+   *  each other out, and so the reset control works even when it does not
+   *  change which node is focused. */
+  refit: 0,
 };
+
+/** Ask the camera to re-frame whatever is in scope. */
+export function requestRefit(): void {
+  view.refit += 1;
+}
 
 /** Called on mount and on unmount. These modules outlive the stage, exactly as
  *  the planet's set piece modules do, so leaving a pose behind would have the
@@ -68,6 +79,7 @@ export function resetView(): void {
   view.labels = Array.from({ length: LABEL_SLOTS }, emptyLabel);
   view.width = 0;
   view.height = 0;
+  view.refit = 0;
 }
 
 /** Send the camera home without snapping it. The chase does the rest. */
