@@ -21,7 +21,7 @@ import Scene from "./scene";
 /**
  * The transformer, full screen.
  *
- * The "immersive" stage: /things/transformer renders a poster and an Enter
+ * The "immersive" stage: /things/llm renders a poster and an Enter
  * button, and pressing it mounts this. Mounted only while open, so closing
  * genuinely tears the WebGL context down rather than hiding it.
  *

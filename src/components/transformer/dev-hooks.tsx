@@ -4,6 +4,8 @@ import { advance, useFrame, useThree } from "@react-three/fiber";
 import { useEffect } from "react";
 import * as THREE from "three";
 
+import { isArmed } from "@/lib/transformer/activate";
+import { pointer } from "@/lib/transformer/input";
 import { useTransformerStore } from "@/lib/transformer/store";
 import { view } from "@/lib/transformer/view";
 
@@ -64,6 +66,17 @@ export function DevHooks() {
     // The live view singleton, so a test can read where the camera decided to
     // go without waiting for the useFrame that mirrors it onto __transformer.
     w.__transformerView = view;
+
+    // The live pointer singleton. Exposed because "clicking does nothing" and
+    // "it is stuck in a drag" are the same class of bug seen from two sides, and
+    // neither is diagnosable without seeing whether `dragging` and `dragged`
+    // ever come back down.
+    w.__transformerPointer = pointer;
+
+    // Whether the last press armed a destination. With `__transformerPointer`
+    // this is the whole click path in two reads: armed says the press landed on
+    // something, and dragging/dragged say whether the release will honour it.
+    w.__transformerArmed = isArmed;
 
     // Frame whatever is currently in scope, from its actual bounding box.
     //
@@ -160,6 +173,8 @@ export function DevHooks() {
       delete w.__transformerFit;
       delete w.__transformerTick;
       delete w.__transformerView;
+      delete w.__transformerPointer;
+      delete w.__transformerArmed;
     };
   }, [gl, scene, camera]);
 

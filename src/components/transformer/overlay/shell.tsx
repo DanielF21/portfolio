@@ -6,7 +6,7 @@ import { CONFIG } from "@/lib/transformer/config";
 import { formatBytes, formatCount } from "@/lib/transformer/format";
 import { OVERVIEW_ID, entryById } from "@/lib/transformer/glossary";
 import { DERIVED, nodeById } from "@/lib/transformer/model";
-import { useTransformerStore } from "@/lib/transformer/store";
+import { isClearStep, useTransformerStore } from "@/lib/transformer/store";
 import { requestRefit } from "@/lib/transformer/view";
 import {
   FRAME,
@@ -18,8 +18,18 @@ import {
   accent,
 } from "@/lib/transformer/theme";
 
+import { DetailPanel } from "./detail-panel";
 import { IndexPanel } from "./index-panel";
-import { InfoCard } from "./info-card";
+
+/**
+ * The two side columns, and the ratio between them.
+ *
+ * The index holds labels; the detail panel holds sentences, so it is set at
+ * 1.75x the index. Both are `minmax`, so a narrow window shrinks them rather
+ * than crushing the viewport between them.
+ */
+const INDEX_COL = "minmax(180px, 15rem)";
+const DETAIL_COL = "minmax(315px, 26.25rem)";
 
 /**
  * The instrument the model sits inside.
@@ -138,10 +148,16 @@ export function Shell({ onExit, children, ready }: Props) {
           </div>
         </header>
 
-        {/* Body: index down the left, viewport taking what is left. */}
+        {/* Body: index down the left, detail down the right, viewport taking
+            what is left. The viewport is the `1fr`, so the panels narrow the
+            canvas rather than covering it, and `auto-frame` re-fits when they
+            do. That is the point of the whole arrangement: nothing that
+            describes the model is ever drawn on top of it. */}
         <div
           className="grid min-h-0 min-w-0"
-          style={{ gridTemplateColumns: "minmax(180px, 15rem) minmax(0,1fr)" }}
+          style={{
+            gridTemplateColumns: `${INDEX_COL} minmax(0,1fr) ${DETAIL_COL}`,
+          }}
         >
           <IndexPanel />
 
@@ -226,20 +242,30 @@ export function Shell({ onExit, children, ready }: Props) {
                   className="px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em]"
                   style={{ border: `1px solid ${RULE}`, color: TEXT }}
                 >
-                  {mode === "prefill"
-                    ? tokens === 0
+                  {/* ONE BUTTON, AND THE MODE PLUS THE FILL DECIDE WHAT IT IS.
+                      Both modes end: prefill after one press, decode when the
+                      cache is full. `isClearStep` is the same predicate the
+                      store steps on, so the label cannot say one thing while the
+                      press does another. */}
+                  {isClearStep(mode, tokens)
+                    ? "Clear"
+                    : mode === "prefill"
                       ? "Run prefill"
-                      : "Clear"
-                    : "Decode one token"}
+                      : "Decode one token"}
                 </button>
               </div>
             )}
 
-            <InfoCard />
           </div>
+
+          <DetailPanel />
         </div>
 
-        {/* Status bar. Says what is selected and what the mouse does. */}
+        {/* Status bar. Says what is selected.
+            THE MOUSE HINTS ARE GONE. "Drag to rotate / scroll to zoom / hover to
+            inspect" is what every 3D viewer on the web does, so it told a reader
+            nothing they would not have found in two seconds, and it sat in the
+            one place with room for something the piece actually knows. */}
         <footer
           className="flex items-center justify-between gap-4 px-4 py-2"
           style={{ borderTop: `1px solid ${RULE}` }}
@@ -255,12 +281,6 @@ export function Shell({ onExit, children, ready }: Props) {
             >
               {hovered?.label ?? entry?.label ?? "Model ready"}
             </span>
-          </div>
-
-          <div className="flex gap-5">
-            <Meta>Drag to rotate</Meta>
-            <Meta>Scroll to zoom</Meta>
-            <Meta>Hover to inspect</Meta>
           </div>
         </footer>
       </div>

@@ -2,7 +2,7 @@
  * The recorded forward pass, if there is one.
  *
  * `scripts/capture-transformer.py` produces
- * `public/things/transformer/capture.json`. It is NOT required: the scene draws
+ * `public/things/llm/capture.json`. It is NOT required: the scene draws
  * its whole structure from the config, and this only supplies real values on
  * top. Everything here is written so that a missing file is an ordinary state
  * rather than an error, because the file is 3 GB of model download away and
@@ -35,7 +35,7 @@ export interface LoadedCapture extends Omit<Capture, "attn"> {
   readonly attn: Float32Array;
 }
 
-const URL = "/things/transformer/capture.json";
+const URL = "/things/llm/capture.json";
 
 let pending: Promise<LoadedCapture | null> | null = null;
 

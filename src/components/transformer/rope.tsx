@@ -5,11 +5,12 @@ import * as THREE from "three";
 
 import { CONFIG } from "@/lib/transformer/config";
 import { formatInt } from "@/lib/transformer/format";
-import { SEQ_TOKENS } from "@/lib/transformer/layout";
+import { BLOCK_BASELINE, SEQ_TOKENS } from "@/lib/transformer/layout";
 import { DERIVED } from "@/lib/transformer/model";
 import { ACTIVATION, OP_LINE } from "@/lib/transformer/theme";
 
 import { Anchor } from "./anchor";
+import { PickBox } from "./pick";
 
 /**
  * Rotary position embedding, drawn as rotation.
@@ -40,7 +41,18 @@ const { headDim } = DERIVED;
 const PAIRS = 8;
 const COLS = SEQ_TOKENS;
 
-const CELL = 0.42;
+/**
+ * Dial pitch. A drawing scale, not a model dimension: how many pairs are sampled
+ * and how big a dial is drawn are both choices, and only the ANGLES are derived.
+ *
+ * It has come down twice, from 0.42 and then from 0.32, both times because the
+ * bank is one of the widest things in attention and sits between two stations
+ * that have to clear it. A 12 column bank at 0.42 was 5.04 units across, wider
+ * than the Q, K, V stack upstream of it, and an occluder wider than its subject
+ * is the one case the station spacing cannot fix by standing off axis. At 0.26
+ * it is 3.12, which is what lets the gaps either side come in to 0.75.
+ */
+const CELL = 0.26;
 const NEEDLE = CELL * 0.34;
 
 /** RoPE's frequency for pair `i`, exactly as the model computes it:
@@ -54,6 +66,22 @@ function inverseFreq(pairIndex: number): number {
 const SAMPLED = Array.from({ length: PAIRS }, (_, i) =>
   Math.round((i * (headDim / 2 - 1)) / (PAIRS - 1))
 );
+
+/** How tall the whole bank stands. */
+const BANK_H = PAIRS * CELL;
+
+/**
+ * Centre of row `r`, counting down from the fastest pair at the top.
+ *
+ * BOTTOM ALIGNED ON THE BRANCH, like everything else in a block. This bank used
+ * to be centred on y = 0, which put half of it below the line every other
+ * station stands on: eight rows straddling the branch while the projections
+ * feeding them grew upward from it. That inconsistency is most of why the
+ * exploded view read as parts at unrelated heights.
+ */
+function rowY(r: number): number {
+  return BLOCK_BASELINE + BANK_H - (r + 0.5) * CELL;
+}
 
 const dummy = new THREE.Object3D();
 
@@ -78,7 +106,7 @@ export function Rope() {
         const angle = t * freq;
         dummy.position.set(
           (t - (COLS - 1) / 2) * CELL,
-          -(r - (PAIRS - 1) / 2) * CELL,
+          rowY(r),
           0.02
         );
         dummy.rotation.set(0, 0, angle);
@@ -99,11 +127,7 @@ export function Rope() {
     let k = 0;
     for (let r = 0; r < PAIRS; r++) {
       for (let t = 0; t < COLS; t++) {
-        dummy.position.set(
-          (t - (COLS - 1) / 2) * CELL,
-          -(r - (PAIRS - 1) / 2) * CELL,
-          0
-        );
+        dummy.position.set((t - (COLS - 1) / 2) * CELL, rowY(r), 0);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
@@ -116,6 +140,14 @@ export function Rope() {
 
   return (
     <group>
+      {/* One box over the whole bank, so pointing anywhere on it answers "RoPE"
+          rather than picking a single dial the model has no name for. */}
+      <PickBox
+        nodeId="block.attn.rope"
+        size={[COLS * CELL, BANK_H, 0.2]}
+        position={[0, BLOCK_BASELINE + BANK_H / 2, 0]}
+      />
+
       {/* The dial faces. */}
       <instancedMesh ref={facesRef} args={[undefined, undefined, count]} frustumCulled={false}>
         <primitive object={ring} attach="geometry" />
@@ -132,13 +164,13 @@ export function Rope() {
         id="rope.fast"
         text="Fastest pair"
         sub="a full turn every few tokens"
-        position={[-(COLS / 2) * CELL - 0.3, ((PAIRS - 1) / 2) * CELL, 0]}
+        position={[-(COLS / 2) * CELL - 0.3, rowY(0), 0]}
       />
       <Anchor
         id="rope.slow"
         text="Slowest pair"
         sub={`period ${formatInt(Math.round(2 * Math.PI / inverseFreq(SAMPLED[PAIRS - 1])))} tokens`}
-        position={[-(COLS / 2) * CELL - 0.3, -((PAIRS - 1) / 2) * CELL, 0]}
+        position={[-(COLS / 2) * CELL - 0.3, rowY(PAIRS - 1), 0]}
       />
       {/* No "RoPE" label here. The index, the breadcrumb, the card and the
           status bar all already say it, and this was the fourth copy: placed

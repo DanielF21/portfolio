@@ -1,11 +1,8 @@
 "use client";
 
-import type { ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 
-import { pointer } from "@/lib/transformer/input";
-import { useTransformerStore } from "@/lib/transformer/store";
 import {
   WEIGHT,
   WEIGHT_LINE,
@@ -17,6 +14,7 @@ import {
 } from "@/lib/transformer/theme";
 
 import { createGridMaterial } from "./grid-material";
+import { usePick } from "./pick";
 
 /**
  * The primitive everything is built from: one tensor, one box, one draw call.
@@ -95,24 +93,10 @@ export function TensorSlab({
 
   useEffect(() => () => material.dispose(), [material]);
 
-  // Hover picking is suppressed mid-drag: highlighting whatever slides under
-  // the cursor while you orbit is distracting and never what you meant.
-  const hoverProps = nodeId
-    ? {
-        onPointerOver: (e: ThreeEvent<PointerEvent>) => {
-          e.stopPropagation();
-          if (pointer.dragging) return;
-          useTransformerStore.getState().setHover(nodeId);
-        },
-        onPointerOut: () => {
-          const s = useTransformerStore.getState();
-          if (s.hover === nodeId) s.setHover(null);
-        },
-      }
-    : {};
+  const pick = usePick(nodeId);
 
   return (
-    <mesh position={position} rotation={rotation} {...hoverProps}>
+    <mesh position={position} rotation={rotation} {...pick}>
       <boxGeometry args={[w, h, d]} />
       <primitive object={material} attach="material" />
       {/* A floored slab is drawn bigger than its parameter count warrants, so

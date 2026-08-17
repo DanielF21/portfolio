@@ -81,10 +81,19 @@ export interface TensorNode {
   /** Set when this node's parameters are physically the same tensor as another
    *  node's, so they must be counted exactly once. */
   readonly tiedTo?: string;
-  /** One line, enough to identify the thing in the inspector. Not the writing
-   *  pass. */
-  readonly note?: string;
 }
+
+/**
+ * THERE IS NO `note` FIELD ANY MORE, and that is deliberate.
+ *
+ * Every node used to carry one or two sentences for the hover card, and the
+ * detail panel showed them above a "Read more" that opened the real text in
+ * `reading.ts`. Both were written about the same tensor, so the short one was
+ * always a compressed restatement of the long one's first paragraph, and a
+ * reader who wanted the answer had to ask twice to get it. The panel now shows
+ * the writing directly. ONE PLACE FOR PROSE, which is `reading.ts`, and this
+ * file is shapes and counts again.
+ */
 
 /**
  * Declared in dataflow order. Layout reads this order, so moving a line here
@@ -98,7 +107,6 @@ export const NODES: readonly TensorNode[] = [
     parent: null,
     shape: ["seq"],
     params: 0,
-    note: "Integer ids. Not vectors yet.",
   },
   {
     id: "embed",
@@ -107,7 +115,6 @@ export const NODES: readonly TensorNode[] = [
     parent: null,
     shape: [vocabSize, hiddenSize],
     params: vocabSize * hiddenSize,
-    note: "A lookup, not a computation. One row per vocabulary entry.",
   },
   {
     id: "stream",
@@ -116,18 +123,16 @@ export const NODES: readonly TensorNode[] = [
     parent: null,
     shape: ["seq", hiddenSize],
     params: 0,
-    note: "The shared bus. Every block reads it and adds back into it.",
   },
 
   // ------------------------------------------------------------ the block
   {
     id: "block",
-    label: "Block",
+    label: "Transformer block",
     kind: "group",
     parent: null,
     shape: [],
     params: 0,
-    note: `The same structure ${numHiddenLayers} times. Depth is the whole trick.`,
   },
   {
     id: "block.ln1",
@@ -136,7 +141,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block",
     shape: [hiddenSize],
     params: hiddenSize,
-    note: "Scales each vector to unit RMS, then applies a learned per-channel gain.",
   },
 
   {
@@ -148,31 +152,47 @@ export const NODES: readonly TensorNode[] = [
     params: 0,
   },
   {
+    /**
+     * THE THREE PROJECTIONS AS ONE STATION.
+     *
+     * It exists because the scene already groups them: `block.attn.qkv` is a
+     * `Scope` in `attention.tsx` and an entry in the index, so it was a place a
+     * reader could BE with nothing in the graph to describe it, and the card
+     * went blank exactly there. Every scope path is now a node id.
+     *
+     * Reparenting q, k and v under it changes no arithmetic: `paramsOf` sums a
+     * subtree, so attention's total is what it always was.
+     */
+    id: "block.attn.qkv",
+    label: "Q, K, V projections",
+    kind: "group",
+    parent: "block.attn",
+    shape: [],
+    params: 0,
+  },
+  {
     id: "block.attn.q",
     label: "Q projection",
     kind: "weight",
-    parent: "block.attn",
+    parent: "block.attn.qkv",
     shape: [hiddenSize, numAttentionHeads * headDim],
     params: hiddenSize * numAttentionHeads * headDim + qBias,
-    note: `${numAttentionHeads} query heads of ${headDim}.`,
   },
   {
     id: "block.attn.k",
     label: "K projection",
     kind: "weight",
-    parent: "block.attn",
+    parent: "block.attn.qkv",
     shape: [hiddenSize, kvDim],
     params: hiddenSize * kvDim + kvBias,
-    note: `Only ${numKeyValueHeads} key heads, so 1/${groupSize} the width of Q.`,
   },
   {
     id: "block.attn.v",
     label: "V projection",
     kind: "weight",
-    parent: "block.attn",
+    parent: "block.attn.qkv",
     shape: [hiddenSize, kvDim],
     params: hiddenSize * kvDim + kvBias,
-    note: `Only ${numKeyValueHeads} value heads, so 1/${groupSize} the width of Q.`,
   },
   {
     id: "block.attn.rope",
@@ -181,7 +201,20 @@ export const NODES: readonly TensorNode[] = [
     parent: "block.attn",
     shape: ["seq", headDim],
     params: 0,
-    note: "Rotates each dimension pair by an angle set by position. No parameters.",
+  },
+  {
+    /**
+     * A RESHAPE, NOT A COMPUTATION, and it has a node for the same reason
+     * `block.attn.qkv` does: the index sends you here, so something has to
+     * describe it. No parameters and no arithmetic; what happens is that the
+     * projections' output is read as heads.
+     */
+    id: "block.attn.heads",
+    label: "Heads",
+    kind: "op",
+    parent: "block.attn",
+    shape: [numAttentionHeads, "seq", headDim],
+    params: 0,
   },
   {
     id: "block.attn.scores",
@@ -190,7 +223,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block.attn",
     shape: [numAttentionHeads, "seq", "seq"],
     params: 0,
-    note: `Q dot K transpose, scaled by 1/sqrt(${headDim}).`,
   },
   {
     id: "block.attn.mask",
@@ -199,7 +231,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block.attn",
     shape: ["seq", "seq"],
     params: 0,
-    note: "Everything above the diagonal is not there. A token cannot see the future.",
   },
   {
     id: "block.attn.softmax",
@@ -208,7 +239,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block.attn",
     shape: [numAttentionHeads, "seq", "seq"],
     params: 0,
-    note: "Each row becomes a distribution summing to 1.",
   },
   {
     id: "block.attn.context",
@@ -217,7 +247,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block.attn",
     shape: [numAttentionHeads, "seq", headDim],
     params: 0,
-    note: "The weighted sum of V. One vector per head per token.",
   },
   {
     id: "block.attn.o",
@@ -226,7 +255,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block.attn",
     shape: [numAttentionHeads * headDim, hiddenSize],
     params: numAttentionHeads * headDim * hiddenSize,
-    note: "Heads concatenated, then mixed back to the stream width. No bias.",
   },
 
   {
@@ -236,7 +264,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block",
     shape: ["seq", hiddenSize],
     params: 0,
-    note: "Attention writes back into the stream rather than replacing it.",
   },
   {
     id: "block.ln2",
@@ -254,7 +281,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block",
     shape: [],
     params: 0,
-    note: "Where most of the parameters are.",
   },
   {
     id: "block.mlp.gate",
@@ -279,7 +305,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block.mlp",
     shape: ["seq", intermediateSize],
     params: 0,
-    note: "silu(gate) multiplied elementwise by up. Two paths meeting at a multiply.",
   },
   {
     id: "block.mlp.down",
@@ -288,7 +313,6 @@ export const NODES: readonly TensorNode[] = [
     parent: "block.mlp",
     shape: [intermediateSize, hiddenSize],
     params: intermediateSize * hiddenSize,
-    note: "Back down to the stream width.",
   },
 
   {
@@ -319,9 +343,6 @@ export const NODES: readonly TensorNode[] = [
     // parameters. Counting it twice would inflate the model by 233M, 15% of it.
     params: tieWordEmbeddings ? 0 : vocabSize * hiddenSize,
     tiedTo: tieWordEmbeddings ? "embed" : undefined,
-    note: tieWordEmbeddings
-      ? "The same tensor as the token embedding, used transposed."
-      : undefined,
   },
   {
     id: "logits",
@@ -330,7 +351,6 @@ export const NODES: readonly TensorNode[] = [
     parent: null,
     shape: ["seq", vocabSize],
     params: 0,
-    note: `One score per vocabulary entry. ${vocabSize.toLocaleString("en-US")} of them.`,
   },
   {
     id: "sample",
@@ -339,7 +359,6 @@ export const NODES: readonly TensorNode[] = [
     parent: null,
     shape: [1],
     params: 0,
-    note: "Softmax over the vocabulary, then pick one.",
   },
 
   // ------------------------------------------------------------- the cache
@@ -350,7 +369,6 @@ export const NODES: readonly TensorNode[] = [
     parent: null,
     shape: [numHiddenLayers, 2, numKeyValueHeads, "seq", headDim],
     params: 0,
-    note: "Neither static nor transient. Grows by one row per generated token.",
   },
 ];
 

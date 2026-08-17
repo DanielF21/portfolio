@@ -38,10 +38,12 @@ export const FULL: Record<string, ComponentType<any>> = {
     ssr: false,
     loading: () => null,
   }),
-  transformer: dynamic(
-    () => import("@/components/transformer/transformer-stage"),
-    { ssr: false, loading: () => null }
-  ),
+  // Keyed by SLUG, which is `llm`; the module it loads is still named for the
+  // block, which is what it mostly draws. See the note in `things.ts`.
+  llm: dynamic(() => import("@/components/transformer/transformer-stage"), {
+    ssr: false,
+    loading: () => null,
+  }),
 };
 
 /**

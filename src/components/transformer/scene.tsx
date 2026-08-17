@@ -12,12 +12,13 @@ import {
   FOG_NEAR_SCALE,
 } from "@/lib/transformer/theme";
 import { DEFAULT_POSE } from "@/lib/transformer/camera";
-import { attachControls } from "@/lib/transformer/input";
+import { attachControls, pointer } from "@/lib/transformer/input";
 import { view } from "@/lib/transformer/view";
 
 import { AutoFrame } from "./auto-frame";
 import { CameraRig } from "./camera-rig";
 import { DevHooks } from "./dev-hooks";
+import { FocusMark } from "./focus-mark";
 import { Ground } from "./ground";
 import { ReadySignal } from "./ready-signal";
 import { Stack } from "./stack";
@@ -87,6 +88,40 @@ function DepthCue() {
 }
 
 /**
+ * The cursor, which is the only thing that says any of this can be clicked.
+ *
+ * THE WHOLE SCENE USED TO READ AS A DRAG SURFACE. The host carried a permanent
+ * inline `cursor: grab` and nothing ever changed it, so the pointer was a grab
+ * hand over the index-clickable geometry, over the plates, over everything. A
+ * grab hand means "this moves when you pull it", so a reader who pressed on a
+ * block and got a small orbit had every reason to conclude the model is
+ * draggable and not clickable, and to stop trying.
+ *
+ * Three states, and each is load bearing: `grabbing` while a drag is actually in
+ * progress, `pointer` over anything a click would navigate to, `grab` otherwise.
+ *
+ * Written in the frame loop off the mutable `pointer` singleton rather than
+ * through React, because `hot` changes as the cursor crosses geometry and none
+ * of that should re-render anything. Guarded on change, so it is a string
+ * compare per frame and no DOM write in the common case.
+ */
+function CursorHint() {
+  const gl = useThree((s) => s.gl);
+
+  useFrame(() => {
+    const want = pointer.dragging
+      ? "grabbing"
+      : pointer.hot
+        ? "pointer"
+        : "grab";
+    const el = gl.domElement;
+    if (el.style.cursor !== want) el.style.cursor = want;
+  });
+
+  return null;
+}
+
+/**
  * The <Canvas>, and the only module in the piece that may import three
  * transitively without care. Everything under `lib/transformer/` stays
  * three-free so the eagerly loaded DOM overlay cannot drag the library into the
@@ -146,7 +181,6 @@ export default function Scene({ lowPower, onContextLost }: Props) {
     <div
       ref={hostRef}
       className="absolute inset-0 touch-none select-none"
-      style={{ cursor: "grab" }}
     >
       <Canvas
         dpr={lowPower ? [1, 1] : [1, 2]}
@@ -196,11 +230,15 @@ export default function Scene({ lowPower, onContextLost }: Props) {
         <RimLight />
 
         <CameraRig />
+        <CursorHint />
         <Ground />
         <Stack />
         {/* After Stack, so the scope groups for the current focus are already
             in the graph when it measures them. */}
         <AutoFrame />
+        {/* After AutoFrame, so the brackets read the bounds it measured this
+            frame rather than the previous one's. */}
+        <FocusMark />
         <ReadySignal />
         <DevHooks />
       </Canvas>

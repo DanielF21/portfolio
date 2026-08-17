@@ -8,7 +8,6 @@ import {
   ATTN_STATIONS,
   BLOCK_BASELINE,
   HEAD_FILL,
-  QKV_PITCH,
   SCORES_SIZE,
   SEQ_TOKENS,
   SLAB_DEPTH,
@@ -20,6 +19,7 @@ import { DERIVED, nodeById, totalParamsOf } from "@/lib/transformer/model";
 import { ACTIVATION, CACHE, OP_LINE, WEIGHT_DIM } from "@/lib/transformer/theme";
 
 import { Anchor } from "./anchor";
+import { PickBox } from "./pick";
 import { Rope } from "./rope";
 import { Scope } from "./scope";
 import { Scores } from "./scores";
@@ -49,19 +49,55 @@ const HEAD_PITCH = widthFor(headDim);
 const Q_SPAN = widthFor(nQ * headDim);
 const KV_SPAN = widthFor(kvDim);
 
-const Y_Q = 0.62;
-const Y_KV = -0.62;
 const SLICE_H = 0.42;
+
+/**
+ * The two head rows, BOTTOM ALIGNED ON THE BRANCH like everything else.
+ *
+ * They used to sit at +0.62 and -0.62, straddling the branch, which put the
+ * entire key/value row BELOW the line the projections that feed it grow up from.
+ * The six-to-one fan is unchanged: it is defined from these two constants, so
+ * moving them carries it.
+ */
+const ROW_GAP = 1.24;
+const Y_KV = BLOCK_BASELINE + SLICE_H / 2;
+const Y_Q = Y_KV + ROW_GAP;
 
 /** Every projection reads the 1,536 wide stream, so every one is this tall. */
 const PLATE_H = heightFor(hiddenSize);
 
-/** Centre of the `i`th plate in the Q, K, V stack, counting down from the top
- *  and standing the whole stack on the branch line. */
-function yOf(i: number): number {
-  const top = BLOCK_BASELINE + 2 * QKV_PITCH + PLATE_H / 2;
-  return top - i * QKV_PITCH;
+/**
+ * Q, K and V SIDE BY SIDE ON ONE LEVEL, standing on the branch.
+ *
+ * They used to be stacked vertically, three plates at three heights, and the
+ * comment here argued that comparing widths against a shared left edge is what a
+ * reader can actually do. That was right about the comparison and wrong about
+ * how to get it: bottom aligned side by side, all three share an edge AND a
+ * baseline, so the 6:1 is the gap between two adjacent objects rather than
+ * something the eye has to carry across 3.34 units of vertical travel.
+ *
+ * Equal height is still the fact it always was: height is the input dimension
+ * and all three read the same 1,536 wide stream. Now that they are level, that
+ * equality is visible as a flat top edge rather than as three separate readings.
+ */
+const QKV_GAP = 0.34;
+const QKV_SPAN = Q_SPAN + 2 * KV_SPAN + 2 * QKV_GAP;
+
+/** Centre of the `i`th plate, left to right: Q, then K, then V. */
+function xOf(i: number): number {
+  const left = -QKV_SPAN / 2;
+  if (i === 0) return left + Q_SPAN / 2;
+  if (i === 1) return left + Q_SPAN + QKV_GAP + KV_SPAN / 2;
+  return left + Q_SPAN + 2 * QKV_GAP + KV_SPAN + KV_SPAN / 2;
 }
+
+/** One level for all three. */
+const QKV_Y = BLOCK_BASELINE + PLATE_H / 2;
+
+/** Labels stagger down the plate rather than sharing its top edge: K and V sit
+ *  0.85 apart and their names are wider than that. Sprites are excluded from the
+ *  fit, so moving them sideways instead would move them out of frame. */
+const LABEL_Y = [PLATE_H, PLATE_H * 0.62, PLATE_H * 0.24];
 
 /** Centre of head `k` in a row of `n` heads, in world units. */
 function headX(k: number, n: number): number {
@@ -163,7 +199,11 @@ function GhostHeads() {
   return (
     <>
       {Array.from({ length: nQ - 1 }, (_, k) => (
-        <lineSegments key={k} geometry={edges} position={[0, 0, -0.09 * (k + 1)]}>
+        <lineSegments
+          key={k}
+          geometry={edges}
+          position={[0, BLOCK_BASELINE + SCORES_SIZE / 2, -0.09 * (k + 1)]}
+        >
           <lineBasicMaterial
             color={OP_LINE}
             transparent
@@ -221,27 +261,27 @@ export function Attention() {
           rows={hiddenSize}
           cols={nQ * headDim}
           size={[Q_SPAN, PLATE_H, SLAB_DEPTH]}
-          position={[0, yOf(0), 0]}
+          position={[xOf(0), QKV_Y, 0]}
         />
-        <Anchor id="q" text={q.text} sub={q.sub} position={[Q_SPAN / 2, yOf(0), 0]} />
+        <Anchor id="q" text={q.text} sub={q.sub} position={[xOf(0), LABEL_Y[0], 0]} />
 
         <TensorSlab
           nodeId="block.attn.k"
           rows={hiddenSize}
           cols={kvDim}
           size={[KV_SPAN, PLATE_H, SLAB_DEPTH]}
-          position={[0, yOf(1), 0]}
+          position={[xOf(1), QKV_Y, 0]}
         />
-        <Anchor id="k" text={k.text} sub={k.sub} position={[KV_SPAN / 2, yOf(1), 0]} />
+        <Anchor id="k" text={k.text} sub={k.sub} position={[xOf(1), LABEL_Y[1], 0]} />
 
         <TensorSlab
           nodeId="block.attn.v"
           rows={hiddenSize}
           cols={kvDim}
           size={[KV_SPAN, PLATE_H, SLAB_DEPTH]}
-          position={[0, yOf(2), 0]}
+          position={[xOf(2), QKV_Y, 0]}
         />
-        <Anchor id="v" text={v.text} sub={v.sub} position={[KV_SPAN / 2, yOf(2), 0]} />
+        <Anchor id="v" text={v.text} sub={v.sub} position={[xOf(2), LABEL_Y[2], 0]} />
       </Scope>
 
       {/* Position, applied as rotation, between projecting and splitting. */}
@@ -251,6 +291,25 @@ export function Attention() {
 
       {/* The split into heads, and the six-to-one sharing. */}
       <Scope id="block.attn.heads" position={[0, 0, ATTN_STATIONS.heads]}>
+        {/* EACH ROW PICKS AS THE PROJECTION IT IS THE SPLIT OF. The top row was
+            wired to `block.attn.context`, which is the weighted sum of V and
+            happens much later, so hovering the query heads answered "Attention
+            output". The two nodes whose notes already describe exactly these
+            rows are `q` ("12 query heads of 128") and `k` ("Only 2 key heads, so
+            1/6 the width of Q"), and V has the identical shape to K.
+
+            Instanced slices cannot carry their own handlers, and one box per row
+            is the answer a reader wants anyway. */}
+        <PickBox
+          nodeId="block.attn.q"
+          size={[Q_SPAN, SLICE_H, 0.3]}
+          position={[0, Y_Q, 0]}
+        />
+        <PickBox
+          nodeId="block.attn.k"
+          size={[KV_SPAN, SLICE_H, 0.3]}
+          position={[0, Y_KV, 0]}
+        />
         <HeadRow count={nQ} y={Y_Q} colour={ACTIVATION} />
         <HeadRow count={nKV} y={Y_KV} colour={CACHE} />
         <mesh geometry={fan}>
@@ -273,11 +332,16 @@ export function Attention() {
           sub={`${headDim} each`}
           position={[0, Y_Q - SLICE_H, 0]}
         />
+        {/* ABOVE its row, not below it. Below was fine while the rows straddled
+            the branch; bottom aligned, the key/value row's underside IS the
+            baseline, so a label under it sits outside the bounding box the
+            camera fits and therefore outside the frame. Both labels now sit in
+            the gap the fan leaves between the rows. */}
         <Anchor
           id="kvheads"
           text={`${nKV} key/value heads`}
           sub={`shared ${groupSize} ways`}
-          position={[0, Y_KV - SLICE_H, 0]}
+          position={[0, Y_KV + SLICE_H, 0]}
         />
       </Scope>
 
@@ -288,11 +352,14 @@ export function Attention() {
           id="scores"
           text="Scores, masked"
           sub={`${SEQ_TOKENS} × ${SEQ_TOKENS} per head`}
-          position={[SCORES_SIZE / 2, SCORES_SIZE / 2, 0]}
+          position={[SCORES_SIZE / 2, BLOCK_BASELINE + SCORES_SIZE, 0]}
         />
       </Scope>
 
-      <Scope id="block.attn.out" position={[0, 0, ATTN_STATIONS.out]}>
+      {/* `block.attn.o`, not `block.attn.out`: the scope path is the node id,
+          which is what lets the card answer for an index entry as well as for a
+          mesh. The station's layout key stays `out`. */}
+      <Scope id="block.attn.o" position={[0, 0, ATTN_STATIONS.out]}>
         {/* 1536 in, 1536 out, so a square: the same area as Q, which is the
             same parameter count. It used to be a 3.0 x 0.5 bar, which left 96%
             of its frame empty and understated it against the MLP. */}

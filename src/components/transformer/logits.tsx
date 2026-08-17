@@ -5,7 +5,9 @@ import * as THREE from "three";
 
 import { CONFIG } from "@/lib/transformer/config";
 import { formatBytes, formatInt } from "@/lib/transformer/format";
-import { BRANCH_Y, STREAM_WIDTH } from "@/lib/transformer/layout";
+import { STREAM_WIDTH } from "@/lib/transformer/layout";
+
+import { WALL_Y } from "./embedding";
 import { ACTIVATION, ACTIVATION_SOFT, OP_LINE } from "@/lib/transformer/theme";
 
 import { Anchor } from "./anchor";
@@ -32,48 +34,47 @@ import { TensorSlab } from "./tensor-slab";
 
 const { vocabSize } = CONFIG;
 
-const SHOWN = 14;
+const SHOWN = 35;
 const ROW_H = 0.13;
-const SEGMENT_H = SHOWN * ROW_H;
-const GAP_H = 0.9;
 const WIDTH = STREAM_WIDTH * 0.75;
+const TOTAL_H = SHOWN * ROW_H;
+/** Same break mark as the wall beside it; see `embedding.tsx`. One tensor. */
+const BREAK_GAP = 0.14;
 
 /** Which drawn row is marked as the sampled token. Any row would do; this is a
  *  position in the drawing, not a claim about which token wins. */
 const SAMPLED_ROW = 4;
 
 export function Logits({ z }: { z: number }) {
-  const breakEdges = useMemo(() => {
-    const box = new THREE.BoxGeometry(WIDTH, GAP_H, 0.3);
-    const edges = new THREE.EdgesGeometry(box);
-    box.dispose();
-    return edges;
+  const breakMark = useMemo(() => {
+    const x = WIDTH / 2;
+    const pts = [
+      -x, BREAK_GAP / 2, 0, x, BREAK_GAP / 2, 0,
+      -x, -BREAK_GAP / 2, 0, x, -BREAK_GAP / 2, 0,
+    ];
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    return g;
   }, []);
-  useEffect(() => () => breakEdges.dispose(), [breakEdges]);
+  useEffect(() => () => breakMark.dispose(), [breakMark]);
 
   const bytesPerPosition = vocabSize * CONFIG.bytesPerParam;
 
   return (
-    <group position={[0, BRANCH_Y, z]}>
+    // Same axis as the wall beside it, and that is a real statement rather
+    // than alignment for its own sake: both are elided along the SAME
+    // 151,936-long vocabulary axis.
+    <group position={[0, WALL_Y, z]}>
       <TensorSlab
         nodeId="logits"
         kind="activation"
         rows={SHOWN}
         cols={1}
-        size={[WIDTH, SEGMENT_H, 0.3]}
-        position={[0, GAP_H / 2 + SEGMENT_H / 2, 0]}
-      />
-      <TensorSlab
-        nodeId="logits"
-        kind="activation"
-        rows={SHOWN}
-        cols={1}
-        size={[WIDTH, SEGMENT_H, 0.3]}
-        position={[0, -(GAP_H / 2 + SEGMENT_H / 2), 0]}
+        size={[WIDTH, TOTAL_H, 0.3]}
       />
 
-      <lineSegments geometry={breakEdges}>
-        <lineBasicMaterial color={OP_LINE} transparent opacity={0.5} />
+      <lineSegments geometry={breakMark} position={[0, 0, 0.16]}>
+        <lineBasicMaterial color={OP_LINE} transparent opacity={0.85} />
       </lineSegments>
 
       {/* The one that was picked. Sampling is a choice over this whole column,
@@ -81,7 +82,7 @@ export function Logits({ z }: { z: number }) {
       <mesh
         position={[
           0,
-          GAP_H / 2 + SEGMENT_H - (SAMPLED_ROW + 0.5) * ROW_H,
+          TOTAL_H / 2 - (SAMPLED_ROW + 0.5) * ROW_H,
           0.32,
         ]}
       >
@@ -104,7 +105,7 @@ export function Logits({ z }: { z: number }) {
         // model within a few units of each other, and in-world labels do not
         // declutter themselves the way the old projected ones did: the fix is
         // to place them apart rather than to sort them at runtime.
-        position={[WIDTH / 2, SEGMENT_H * 2 + GAP_H, 0]}
+        position={[WIDTH / 2, TOTAL_H / 2, 0]}
       />
       <Anchor
         id="sample"
@@ -112,7 +113,7 @@ export function Logits({ z }: { z: number }) {
         sub="softmax over the vocabulary, then pick one"
         position={[
           WIDTH / 2,
-          GAP_H / 2 + SEGMENT_H - (SAMPLED_ROW + 0.5) * ROW_H,
+          TOTAL_H / 2 - (SAMPLED_ROW + 0.5) * ROW_H,
           0.32,
         ]}
       />

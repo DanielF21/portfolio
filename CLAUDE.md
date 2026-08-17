@@ -307,10 +307,18 @@ hangs outright. Drive the simulation with `__planetSetPos` plus synthetic
 
 ## The transformer
 
-An orbitable Qwen2.5-1.5B at `/things/transformer`, same immersive stage pattern
-as the planet. Three-free rule applies identically: nothing in
-`src/lib/transformer/` or `src/components/transformer/overlay/` may import
-`three`.
+An orbitable Qwen2.5-1.5B at `/things/llm`, titled "Language Model", same
+immersive stage pattern as the planet. Three-free rule applies identically:
+nothing in `src/lib/transformer/` or `src/components/transformer/overlay/` may
+import `three`.
+
+**The URL and the source tree disagree on purpose.** The slug, the title and
+`public/things/llm/` say language model, because the thing on screen is a whole
+model: an embedding, 28 blocks, and the embedding again. The code directories say
+transformer, because the subject of almost every file in them is the block. Only
+three places bridge the two, and all three are commented: the registry entry in
+`things.ts`, the `llm` key in `loaders.tsx` (keyed by slug, loading a module
+named for the block), and the capture URL.
 
 ### Every number is derived
 
@@ -357,30 +365,347 @@ Three documented departures, all deliberate and all commented at the constant:
   that matters is local, and the MLP taper still starts at the true width.
 - **The vocabulary axis** is 297 units against a 3 unit stream, so the embedding
   wall is drawn with a VISIBLE break and the true count on the label. A silent
-  squash would make 151,936 rows look like a few dozen. **Elision breaks area
-  proportionality**, which is why the claim is scoped to weights inside a block:
-  the embedding is 233M parameters drawn at a third the area of a tensor 17x
-  smaller.
+  squash would make 151,936 rows look like a few dozen.
+- **The intermediate axis**, since Daniel asked for the MLP closer in size to the
+  parts around it. `widthFor(8960)` is 17.5 and that is the truth: gate, up and
+  down hold 13,762,560 parameters each, 5.8x Q, and to scale the MLP towers over
+  everything near it. It is drawn at `INTERMEDIATE_DRAWN` (7.0) with the SAME
+  device the vocabulary axis gets: real cells at the real pitch, a visible break,
+  the true count on the label. A silent squash was not available, because the key
+  on screen states the rule in parameters per square unit.
+
+**Elision breaks area proportionality**, so the on-screen key names the exception
+itself: "Where an axis is too long to draw it is broken, not squashed." Area is
+parameter count for every weight whose axes are drawn whole.
 - **`MIN_AXIS`**, the bottom end of the rule and the mirror of `ELIDE_ABOVE`. A
   [1536] vector's second axis is `heightFor(1)` = 0.002 units, sub-pixel at every
-  distance. Floored slabs are drawn at `MIN_AXIS` **and outlined**, and the card
-  says why. A marked overstatement is honest; the silent 270x one this replaced
-  was not.
+  distance. Floored slabs are drawn at `MIN_AXIS` **and outlined**, and the detail
+  panel says why. A marked overstatement is honest; the silent 270x one this
+  replaced was not.
 
-### Isolation is load bearing, not cosmetic
+### One vertical grammar
 
-The stations sit in a line along Z, so a square view of any one of them looks
-straight through every other one, and the views that most need a square angle
-(Q against K/V, the causal mask staircase) are exactly the blocked ones.
+**Two levels exist and nothing sits between them.** The stream at y = 0 is the
+datum: the bus, the 28 collapsed plates and both ends of the model. The branch at
+`BRANCH_Y` exists only inside an open block, and everything there is bottom
+aligned on it and grows upward.
 
-`glossary.visibleUnder` is the whole rule: while `focus` is set, a thing is drawn
-when its scope path is a prefix of the focus or the focus is a prefix of it.
-Ancestors and descendants stay, siblings go. **Three separate things had to be
-hidden**, each only discovered by fixing the one before it: sibling stations, the
-neighbouring block plates (the open block is 9.4 units and its neighbour sits
-just outside, so any camera far enough back has five plates in front of it), and
-the stream conduit, which from a near-axis camera is seen end on and becomes a
-column through the middle of the shot.
+**Nothing in a block may straddle the baseline.** `layout.ts` declared that rule
+and five things broke it: the RoPE bank, both head rows, the fan and the score
+grid were centred on the branch, so half of each hung below the line the
+projections feeding them grew up from, and the whole key/value row sat under it.
+Measured, the station centres ran 1.04, 2.50, 3.58, 4.00, 7.34 and 11.38. That
+column is what "the individual items are different sizes centred at different
+points" was describing. Stations share an EDGE, not a centre; the difference
+between their centres is the parameter counts and is meant to be read as size.
+
+**A collapsed block stands ON the stream**, its underside on the conduit's top
+face. It used to float a branch height above on a 0.5 wide post, 5.95% of the
+plate's silhouette and the *bright* element against a near-background plate. The
+open block still lifts its machinery onto the branch, and that needs no code:
+`OnBranch` is a child of the group `Block` scales by `view.explode`, so the
+branch height is 0 when shut and `BRANCH_Y` when open.
+
+Two things had to come with that, and both are load bearing:
+
+- **The hero plate collapses toward the block's ORIGIN**, not its own centre.
+  The interior grows from y = 0, so a plate shrinking about its own centre
+  vanishes to a point 2.8 units above where its contents appear and the bloom
+  visibly tears.
+- **The contact lip.** A plate is 4.2 wide over a 1.0 conduit, so standing them
+  on it hides nearly all of the stream. And the deleted taps were the one bright,
+  easily hit thing at the overview, which is exactly what "clicking a block does
+  nothing" hinged on. A lip at the plate's FULL width does both jobs and says
+  something truer than a 0.5 spike: a block touches the bus across its footprint.
+
+### The model is a loop, because the weights are tied
+
+Qwen ties the output projection to the token embedding, so there is ONE 233M
+tensor. It used to be drawn twice, 47 units apart, with the tying stated only in
+a caption; two identical walls at opposite ends of a stack read as two tensors
+however they are labelled.
+
+Now: the wall stands once at the input end, the stream leaves one of its ROWS,
+runs through all 28 blocks, meets the **final norm** at the output end (1,536
+parameters `model.ts` has always declared and the geometry never drew), drops to
+`RETURN_Y` and comes back underneath to the same wall, where the logits leave the
+far face.
+
+- **The wall is seated so a row lands on y = 0**, not the break. `WALL_Y` derives
+  that from `GAP_H` and `ROW_H`; a group at y = 0 would have the stream emerging
+  from the elision.
+- **`END_GAP` is exported and both files read it.** `stack.tsx` placed the wall
+  at 4.5 while `residual.tsx` overshot the stack by its own `PAD` of 1.6, leaving
+  a 2.9-unit air gap between the end of the bus and the thing it flows out of.
+  Two constants that had to agree with no mechanism making them.
+- **Two names, one tensor, in the pick layer.** A mesh carries one `nodeId`, so
+  the wall gets two invisible `PickBox`es: the model side answers `embed`, the
+  far side `lm_head`. That is the tie made hoverable rather than captioned, and
+  it costs no draw call and no framing.
+- **The return runs in the one band nothing else occupies**, between the stream's
+  underside at -0.275 and the ground at -3.2. It is slimmer and dimmer than the
+  stream, and that is a real difference: the stream carries [seq, 1536], what
+  comes back for the logits is the last position only. If it ever competes with
+  the stream, segment it rather than thinning it.
+
+### Nothing is ever shown in isolation
+
+**Focus frames and marks. It does not remove.** Selecting anything points the
+camera at that subtree, draws corner brackets round it and opens its block. The
+other 27 blocks, the two ends, the stream and every sibling station stay drawn.
+
+This replaced the opposite rule, and the reason is worth keeping. The stations
+sit in a line along Z and every tensor face points along ±Z, so a camera square
+on to a face looks straight down the line at everything upstream. Hiding the
+siblings fixed that and cost the piece its entire explanatory value: clicking
+"RMSNorm" produced a bar on a stick in an empty frame, and "Scores, and the mask"
+a staircase belonging to nothing. Someone who already knew the answer could read
+it; nobody else could.
+
+The line-of-sight problem now lives in the geometry, where it can be solved
+rather than hidden:
+
+- **`STATION_SEQUENCE` in `layout.ts`** spaces the stations for an off-axis
+  camera. An occluder `u` upstream is thrown `u * sin(theta)` sideways, so two
+  stations of half width `wA`, `wB` separate once `u * sin(theta) > wA + wB`.
+  Half widths run 1.3 to 1.7, so consecutive stations need about 4.5 units.
+- **`IN_BLOCK = 0.8` in `glossary.ts`** is that theta, and every in-block pose
+  uses it. Authoring a different azimuth for one shot silently invalidates the
+  spacing for that shot. Faces come out at 70% width; foreshortening is a uniform
+  scale along one axis, so every ratio the piece claims survives it exactly.
+- **A close-up rescues itself.** Anything more than `distance / cos(theta)`
+  upstream is behind the camera. That is what the 15 unit gap after the MLP is
+  for: `gate` is 17.5 wide against an add junction 1.5 wide, so no azimuth moves
+  it aside and the only fix is to get past it. Its `fill` is high for the same
+  reason, since standing further back puts more of the MLP in front.
+- **An occluder smaller than its subject is tolerated**, deliberately. A 0.16
+  tall norm bar silhouetted against the MLP's grid costs nothing and says where
+  the two sit relative to each other.
+
+The station span is 49.6 units and the block's full extent a little more, which
+is most of the length of the whole 28 block stack. That is not a chosen scale: it is what an exploded view of an
+object whose largest part holds 88% of its mass has to look like.
+
+**`branch.tsx` is the rail the stations stand on, and it is the second attempt.**
+The first ran CENTRED on `BRANCH_Y` while the stations were bottom aligned at
+exactly `BRANCH_Y`, so it cut a 0.17 notch into the underside of every one of
+them and passed clean through the interior of the three that were centred rather
+than aligned (2 of 8 RoPE dial rows, 4 of 12 fan ribbons, 2 of 12 score rows).
+That one was deleted.
+
+Two rules make the second one work, and both are one line each:
+
+- **The rail's TOP FACE is the baseline.** It sits entirely below everything, so
+  the stations rest on it instead of being skewered by it. Combined with the
+  alignment pass, nothing crosses that line at all any more.
+- **It does not overhang.** Each run stops at the outermost geometry it connects
+  (`JUNCTION_RUN` upstream of the junction, where the add's branch body is), so
+  there is no stub protruding past the end stations into empty space.
+
+Schematic cross section, for the reason set out at `CONDUIT_W`: the tensor on the
+branch is [seq, 1536] for most of its length but not inside attention or inside
+the MLP, and both of those are drawn at true proportion in the station where you
+look at them.
+
+### Clicking
+
+**Everything in the scene is a destination, and the destination is read off the
+scene graph.** `usePick` takes the dotted path `Scope` provides through context
+and focuses it; the index is keyed by the same paths, so clicking a slab inside
+`block.attn.qkv` goes there and cannot drift from it. The alternative was a
+hand-written table from node id to index entry, which is a second copy of the
+tree. A scope with no index entry simply does not navigate, which is how the
+residual stream and the two ends stay hoverable without being destinations.
+
+**Clicking any of the 28 opens a MIDDLE one** (`store.openBlock`). They are the
+same structure; the only thing that differs is how much room they have to open
+into, and blooming block 0 or block 27 is lopsided for a reason that means
+nothing about the model. The layer stepper is still there for a specific one.
+
+**THERE IS NO `onClick` ANYWHERE IN THIS SCENE, AND THAT IS THE WHOLE POINT.**
+Selecting used to ride on the browser's `click`, delivered to the canvas and
+dispatched by r3f. It took five rounds to fix "clicking a block does nothing"
+because four of them tuned a handler that, for a real mouse, was never running.
+
+The mechanism: the controls called `setPointerCapture` on the canvas host, and
+**pointer capture retargets the compatibility mouse events**, so `mouseup` and
+therefore `click` go to the CAPTURE element rather than to the element under the
+cursor. The orbit kept working because it listens on the host, which is the
+capture element; the canvas simply stopped receiving clicks. Hover was unaffected
+because nothing is captured while merely moving.
+
+It was invisible from the console and invisible to automation, because
+CDP-synthesised input does not travel that path. Every round of "verified" was
+verified against the one input method that could not reproduce it.
+
+So the click is CONSTRUCTED, not inferred, out of the two events certain to
+arrive (`lib/transformer/activate.ts`):
+
+- r3f's `onPointerDown` on an object ARMS an action. Pointerdown is dispatched
+  before any capture exists, and picking demonstrably works because hover already
+  lights the cursor.
+- The controls' own `pointerup`, bound on `window`, FIRES it when the pointer
+  travelled less than `CLICK_SLOP`.
+
+`setPointerCapture` is gone entirely; dragging outside the canvas is handled by
+listening on `window`, which needs no capture and retargets nothing.
+
+**Three outcomes, decided by what the press landed on.** The capture-phase
+handler on the host arms the FALLBACK, "back out to the whole model", before the
+event reaches the scene at all; doing that in the bubble-phase `down` would run
+after r3f and wipe the arming that just happened. Then:
+
+| Press landed on | What happens |
+|---|---|
+| a destination | arms that destination, overwriting the fallback |
+| something pickable that is not a destination (the stream, the two ends) | disarms, so it is inert rather than an accidental exit |
+| empty space | the fallback survives and the release backs out to the stack |
+
+The fallback does nothing at the overview, or pressing the background while
+already at the top would re-frame the shot out from under someone who had just
+orbited.
+
+**The buttons-are-up self-heal COMPLETES the gesture, it does not abandon it.** A
+move with no button held while a press is open means the release was either lost
+or is about to arrive; some input paths emit exactly such a move between
+pointerdown and pointerup. Treating it as "give up" throws the selection away.
+`finish` is idempotent, so a real pointerup arriving afterwards does nothing
+twice.
+
+**Two thresholds, not one, and sharing them was a bug of its own.**
+`DRAG_THRESHOLD` (4px) starts the orbit; `CLICK_SLOP` (12px) ends the click. When
+one number did both, crossing 4px both rotated the camera and cancelled the
+click, so a trackpad press, which drifts well past four pixels, cancelled every
+click. Between the two the gesture does both, and that is correct: the small
+rotation is thrown away by the re-frame the selection asks for.
+
+**`setFocus` early-returns when the focus is unchanged**, so with a block already
+open, pressing one of the plates it had pushed aside did nothing at all. Every
+activation calls `requestRefit()` too, so pressing what you are already looking
+at re-frames it instead of being inert.
+
+Only the plates and taps carry an explicit destination, because they are the one
+part of the model outside every `Scope`. The taps get it too: at the overview
+those bright spikes are a large share of the model's screen area and much easier
+to hit than the dark plates behind them.
+
+**A gesture that never ends is the other way this fails.** With `activeId` stuck
+non-null, `move` keeps orbiting on every mouse move with no button held AND
+`down` early-returns forever. `endGesture` is the single exit, called from
+pointerup, pointercancel, `contextmenu` and window `blur`, and `move` self-heals
+by ending the gesture the moment it sees `buttons === 0`. Only the primary button
+starts a drag: a right press used to start one and its release goes to the
+context menu rather than the page.
+
+**The cursor is the only thing that says any of this can be clicked**
+(`CursorHint` in `scene.tsx`). The host used to carry a permanent inline
+`cursor: grab`, so the pointer was a grab hand over everything; a grab hand means
+"this moves when you pull it", which is precisely the wrong thing to tell a
+reader about geometry that is also an index. Three states: `grabbing` while
+dragging, `pointer` over anything a press would navigate to, `grab` otherwise.
+Driven off `pointer.hot` in the frame loop rather than through React.
+
+### Testing input, and why it kept lying
+
+Three traps, each of which produced a false pass:
+
+- **Synthetic pointer events cannot drive r3f picking.** It builds its ray from
+  `event.offsetX/offsetY`, which is 0 on a hand-built `MouseEvent`, so every
+  synthetic click raycasts the top-left corner and hits nothing.
+- **Synthetic and emulated input moves the pointer exactly zero pixels** between
+  press and release, which is the one case a drag threshold cannot see, and it
+  does not reproduce pointer-capture retargeting either.
+- **The automation's drag sometimes delivers no events at all.** A "verified"
+  drag test once logged literally zero events reaching the page.
+
+So: input-layer state machine with synthetic events, picking with real clicks,
+and neither result transfers to the other. `window.__transformerArmed()` and
+`window.__transformerPointer` split the path in half after one press: armed says
+the press landed on something, dragging/dragged say whether the release honoured
+it.
+
+Two consequences elsewhere:
+
+- **`auto-frame` measures a SUBTREE, not what is on screen.** It used to measure
+  everything visible, which was only correct because focusing removed the rest.
+  `Scope` tags its group with `userData.scopePath` and the fit unions only meshes
+  whose scope is the focus or below it. Ancestors are excluded: the `block` scope
+  physically contains the whole 50 unit run, so counting it while focused on one
+  frames the lot.
+- **The KV cache stands beside the model** (`KV_ORIGIN`), not on the origin. It
+  is the one thing that is neither weight nor activation, and on the origin it was
+  drawn with the residual stream running through the middle of it.
+
+### The cache has a capacity, and both modes end
+
+`CACHE_TOKENS` lives in `layout.ts` because TWO things need it: the grid draws
+that many columns and the store stops decode at the same number. A capacity known
+to only one of them is a capacity the other silently violates, which is what used
+to happen: decode incremented forever, so the caption counted tokens that were
+nowhere on screen.
+
+`isClearStep(mode, tokens)` decides both what the one button says and what it
+does, so the label cannot promise something the press does not do. Prefill clears
+to nothing; **decode clears to the PROMPT**, because decode presupposes a
+prefilled prompt and there is no such thing as decoding into an empty cache.
+
+### Opening a block is a motion, and the block grows out of its plate
+
+`view.explode` runs 0 to 1 and everything that moves is driven by it:
+
+- `Stack` rewrites its plate, solid and tap matrices each frame while it moves.
+- **The hero's plate scales by `1 - explode`** while **`Block` scales its whole
+  interior by `explode`**. Because every station's POSITION is a child of that
+  one transform as well as its geometry, scaling it collapses the 53 unit run
+  back to the block's own origin at the same time as it shrinks the parts. At 0
+  the entire interior is a point inside the plate. One line, and it is what makes
+  the parts unfold out of the block rather than appear beside it.
+
+`blockZ(i, focused, open)` therefore takes a FRACTION, not a flag. The interior
+stays mounted until the bloom has closed, or asking for the overview deletes the
+block one frame before the plates start moving back in.
+
+Three things that will bite:
+
+- **Clamp the frame delta.** `damp` is frame-rate independent, which also means
+  one long frame swallows the whole animation. After an idle tab or a fresh
+  chunk compile the first delta can be hundreds of milliseconds and the bloom
+  finishes in that single frame, which is the exact "the items just spawn"
+  failure it exists to fix.
+- **`auto-frame` waits for the bloom, and then waits one more frame.** A block
+  measured mid-bloom is measured at whatever fraction of itself it had reached,
+  and the camera lands that fraction too close, so the camera holds still for
+  about 0.4s and only then flies. The extra frame is subtler: `useFrame`
+  callbacks run in subscription order and `Block` subscribes AFTER `auto-frame`
+  because it is mounted conditionally, one commit later, so on any given frame
+  the block's world scale is the one applied on the PREVIOUS frame. Measured
+  immediately, every fit came out about 1% short. Do not replace the frame
+  counter with a check on any particular component: the next thing to write a
+  transform in a `useFrame` will hit this too.
+- **Recompute the instanced bounding spheres after writing matrices.**
+  `InstancedMesh.raycast` rejects against a cached sphere computed once, lazily,
+  so the plates stopped being hoverable the moment they moved. It cost nothing
+  while they were hidden under focus and broke immediately once they were not.
+
+Testing note: in a backgrounded tab each forced frame advances the simulation by
+almost nothing, so the bloom never completes and every in-block fit looks stuck
+at the default pose. That is the harness, not the code. Force the end state with
+`view.explode = view.explodeTo = 1` and bump `view.refit`.
+
+### The key says what the shapes mean
+
+`overlay/key.tsx`. The reference this piece answers needs no legend, because its
+subject exists: a reader who has never seen an H100 still knows a circuit board
+from a heatsink, so its geometry arrives already interpreted. Nothing here has a
+physical form, so every shape is a choice and the choices have to be stated or a
+reader cannot tell a claim from a decoration.
+
+The line that matters is **"a weight's area is its parameter count"**, and it is
+computed from `WIDTH_SCALE` rather than typed, so moving `STREAM_WIDTH` moves the
+sentence. Everything under it is a colour convention a reader would eventually
+infer. `ACTIVATION` and `STREAM` are the same hex and get ONE row: the residual
+stream is an activation, and a legend claiming a distinction the scene does not
+draw is worse than no legend.
 
 ### Blocks branch off the stream
 
@@ -447,7 +772,7 @@ Three things it is easy to get wrong here, all of which happened:
   that the embedding wall sat off the left edge of a frame the arithmetic called
   82% full.
 - **Exclude what spans the scene**: the ground plane and the long stream conduit
-  carry `userData.noFit`. Measuring the 41-unit stream backed "One block" off to
+  carry `userData.noFit`. Measuring the 41-unit stream backed the block shot off to
   78 units for a block 9 units deep.
 
 ### The overview opens nothing
@@ -462,25 +787,112 @@ tap per block puts them back in one draw call. Without them the stream reads as 
 bar lying alongside the stack rather than something all 28 edit, which is exactly
 the misreading the branch geometry exists to prevent.
 
-### One card, and labels at exactly your level
+### Labels at exactly your level
 
 There is no projected-label layer. `Anchor` draws a short name as an in-world
 sprite, which faces the camera for free, is occluded by geometry correctly, and
-cannot drift from what it names. Details live in the DOM info card, driven by
-hover and falling back to focus.
+cannot drift from what it names. Everything longer lives in the detail column.
 
 **A label shows only when its scope IS the focus.** `Scope` provides its path
 through context and `Anchor` reads it. The rule tightened twice: "am I zoomed in
-at all" put fifteen labels on the "One block" shot, and "or one level down" fixed
+at all" put fifteen labels on the whole-block shot, and "or one level down" fixed
 that but broke "Attention", which has five sub-stations carrying twelve labels
 between them. A group view needs no in-world labels: the index lists what is
-inside it, the card names what the cursor is on, the status bar says where you
-are.
+inside it, the detail panel describes what the cursor is on, the status bar says
+where you are.
 
 Sprites are excluded from the fit, so **a label placed outside the geometry's
 bounding box is outside the frame**. Labels also get lifted toward the camera by
 their own height, because an anchor sits on the edge of what it names and depth
 testing ate the buried half ("Q projection" rendered as "ection").
+
+### The writing lives in one file, and it has a voice
+
+`reading.ts`, three or four short paragraphs per subject plus the occasional
+bulleted term. Nothing in the scene imports it; only the detail panel does.
+
+The prose is written the way Philip Kiely writes *Inference Engineering*:
+definition first, then what the thing costs, then why an inference engineer
+cares. Short declaratives, real numbers instead of adjectives, no metaphors. If
+you add text here, read a few pages of that book first rather than guessing at
+the register.
+
+**There is no short form any more.** `model.ts` used to carry a one or two
+sentence `note` per node for the hover card, and the panel showed it above a
+"Read more". Both described the same tensor, so the note was always a compressed
+restatement of the body's first paragraph, and a reader had to ask twice for an
+answer the panel was already holding. `model.ts` is shapes and counts again.
+
+**Every figure is interpolated from `CONFIG` and `DERIVED`**, never typed, for
+the same reason the geometry derives its dimensions: a sentence that has to be
+re-checked by hand against a config file is a sentence that will one day be
+wrong.
+
+The three RMSNorms share one body and differ by an opening line, because that is
+all that differs about them: same operation, same 1,536 parameters, different
+position in the pass.
+
+### The detail panel is a column, and the floating card is gone
+
+`overlay/detail-panel.tsx` is the only surface that describes anything. It is a
+permanent third grid column at 1.75x the index (`INDEX_COL` and `DETAIL_COL` in
+`shell.tsx`), so the canvas narrows and `auto-frame` re-fits rather than having
+text drawn over the model.
+
+**What it replaced, and why, because the failure is not obvious.** There used to
+be a card floating in the bottom right of the viewport with a "Read more" button
+on it. Reaching that button meant dragging the cursor across the scene, and the
+scene is made of pickable objects: the residual stream conduit runs the length of
+the frame, so the card had usually rewritten itself to "Residual stream" before
+the cursor arrived and the button then belonged to something else. **No timing
+fix helps.** `hover` is not null during that trip, it is a different node, so a
+grace window (which is what was tried) cannot see the difference between crossing
+an object and arriving at one. A docked surface removes the trip.
+
+Two smaller things came with it: the card no longer covers its own subject, which
+it did most visibly over the KV cache grid, and the layout claims the space
+instead of leaving it over, which is the argument at the top of `shell.tsx`.
+
+**`store.subject` is not `hover`.** Hover goes null constantly and the subject
+never does, so the panel keeps describing the last thing pointed at instead of
+blinking empty between objects. The earlier rule, that no annotation should show
+while nothing is hovered, was about a card floating over the scene; a reference
+column beside it is a different object. `setFocus` writes the subject too, for
+the cases with no cursor involved: backing out to the stack, and "Reset view".
+
+The overview is a subject like any other, and `reading.ts` has an entry for it
+under `OVERVIEW_ID`. It is the only entry with no node behind it, so the panel
+takes its heading from `CONFIG` rather than from a tensor, and it is what the
+piece opens on.
+
+**No close button and no expand button.** The column is furniture, like the
+index, so there is nothing to dismiss, and the writing is what it is for, so it
+shows the writing rather than a summary of the writing. Both controls existed for
+about an hour and both were the residue of the card this replaced.
+
+The panel scrolls back to its top whenever the subject changes. With a body this
+long, pointing at something new while scrolled down would otherwise drop you into
+the middle of a paragraph about it.
+
+### Hovering the index navigates
+
+Pointing at an index row goes there. `DWELL_MS` (90ms) is what stops that being
+chaos: reaching the key at the bottom of the panel means dragging the cursor down
+the whole list, and without a dwell that flies the camera through all fourteen
+shots on the way. A click does not wait.
+
+The detail panel, though, updates with no dwell at all. An index row and the
+geometry it names are the same destination, so pointing at either has to answer
+the same way, and text changing in a docked column costs nothing to undo.
+
+**That works because an index id IS a `model.ts` node id.** Two nodes were added
+to the graph rather than mapped around (`block.attn.qkv`, `block.attn.heads`) and
+the output projection's scope was renamed from `block.attn.out` to
+`block.attn.o`. Keep it that way: the alternative is a table from index entry to
+node, which is a second copy of the tree and drifts.
+
+The overview is the one entry with no node, deliberately. It is not a thing in
+the model, it is all of them, and the panel handles it as a case of its own.
 
 ### Light, and the palette
 
@@ -520,8 +932,11 @@ grid is hand-rolled off the same `fwidth` trick `grid-material` already uses.
 
 ### Budget
 
-41 draw calls in the worst view (one open block), 10,190 triangles. The overview
-is 18. Every isolated station is under 25.
+63 draw calls in the worst view, 11,330 triangles. The overview is 22 and 1,160.
+Every in-block view is around 56 to 59, because they all draw the whole block and
+both halves of the stack; that is the cost of the piece making sense and it is
+cheap. Deleting the rail and the tap mesh paid for the contact lip and the two
+extra segments each elided MLP weight costs.
 
 ### Dev hooks
 
@@ -535,6 +950,7 @@ is 18. Every isolated station is under 25.
 | `window.__transformerTick(n)` | Advance the R3F loop n frames, running every `useFrame` |
 | `window.__transformerFit(fill)` | Frame what is in scope, from its measured bbox |
 | `window.__transformerView` | The live `view` singleton |
+| `window.__transformerPointer` | The live `pointer` singleton: dragging, dragged, hot |
 
 `__transformerRender` exists because a backgrounded tab never fires
 `requestAnimationFrame`, and **awaiting rAF there hangs the renderer for 45
@@ -561,7 +977,7 @@ screenshot
 ### The capture
 
 `scripts/capture-transformer.py` records one real forward pass to
-`public/things/transformer/capture.json`, which the score grid uses for real
+`public/things/llm/capture.json`, which the score grid uses for real
 attention weights. It is NOT required and has not been run: it needs torch,
 transformers and a 3.1 GB model download. A missing capture is an ordinary state
 and the grid falls back to a flat triangle. **Never substitute an invented

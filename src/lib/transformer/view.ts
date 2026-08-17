@@ -34,6 +34,31 @@ export const view = {
    *  each other out, and so the reset control works even when it does not
    *  change which node is focused. */
   refit: 0,
+
+  /**
+   * How far the hero block has bloomed open, 0 to 1.
+   *
+   * A FRAME VALUE, not an edge, which is why it lives here and not in the store.
+   * `explodeTo` is where it is heading and the stack damps towards it, rewriting
+   * its instance matrices only while the two differ. Opening a block moves 27
+   * plates roughly 23 units each; done as a jump that reads as the stack being
+   * replaced, and done as a motion it reads as the one thing it is, which is the
+   * block you asked for pushing its neighbours aside to make room.
+   */
+  explode: 0,
+  explodeTo: 0,
+
+  /**
+   * World-space bounds of whatever is focused, as [min, max], or null.
+   *
+   * Written by `auto-frame` when it measures, read by the focus marker so the
+   * brackets sit on the thing the camera just framed. Plain numbers, because
+   * this file must stay three-free.
+   */
+  focusBox: null as null | {
+    min: [number, number, number];
+    max: [number, number, number];
+  },
 };
 
 /** Ask the camera to re-frame whatever is in scope. */
@@ -50,6 +75,9 @@ export function resetView(): void {
   view.width = 0;
   view.height = 0;
   view.refit = 0;
+  view.explode = 0;
+  view.explodeTo = 0;
+  view.focusBox = null;
 }
 
 /** Send the camera home without snapping it. The chase does the rest. */

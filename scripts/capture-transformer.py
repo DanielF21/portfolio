@@ -2,7 +2,7 @@
 """
 Capture one real forward pass of Qwen2.5-1.5B for the transformer visualization.
 
-Writes public/things/transformer/capture.json, which the scene loads lazily.
+Writes public/things/llm/capture.json, which the scene loads lazily.
 Without it the scene still renders: the structure is drawn from the config and
 the score grid falls back to a flat triangle. What the capture adds is REAL
 attention, so the patterns on screen are patterns the model actually produced
@@ -43,7 +43,7 @@ OUT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "public",
     "things",
-    "transformer",
+    "llm",
     "capture.json",
 )
 

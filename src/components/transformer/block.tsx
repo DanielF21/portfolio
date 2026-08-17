@@ -1,19 +1,26 @@
 "use client";
 
+import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
+import type * as THREE from "three";
+
 import { CONFIG } from "@/lib/transformer/config";
-import { visibleUnder } from "@/lib/transformer/glossary";
 import {
   BLOCK_BASELINE,
   BRANCH_Y,
   MIN_AXIS,
+  SEQ_HEIGHT,
+  SEQ_TOKENS,
   SLAB_DEPTH,
   STATIONS,
   widthFor,
 } from "@/lib/transformer/layout";
-import { useTransformerStore } from "@/lib/transformer/store";
+import { view } from "@/lib/transformer/view";
 
 import { Attention } from "./attention";
+import { Branch } from "./branch";
 import { Mlp } from "./mlp";
+import { RmsNorm } from "./norm";
 import { ResidualJunction, StreamTap } from "./residual";
 import { Scope } from "./scope";
 import { TensorSlab } from "./tensor-slab";
@@ -21,8 +28,10 @@ import { TensorSlab } from "./tensor-slab";
 /**
  * The hero block, opened up on the branch above the stream.
  *
- * Stations run along Z in dataflow order, input nearest the camera. Everything
- * here is one layer's worth; the other 27 are the plates receding behind it.
+ * Stations run along Z in dataflow order, input nearest the camera, spaced so
+ * that the off-axis camera every in-block shot uses separates them rather than
+ * stacking them. Everything here is one layer's worth; the other 27 are the
+ * plates receding at either end.
  *
  * Note how small the norms are next to the projections. An RMSNorm is a single
  * vector of 1536 gains, so it is one row of cells against the MLP's 13.8
@@ -39,70 +48,83 @@ import { TensorSlab } from "./tensor-slab";
 const { hiddenSize } = CONFIG;
 
 /**
- * One learned gain per channel, and nothing else.
+ * The branch a station's machinery stands on.
  *
- * Drawn as a single thin bar rather than a full height plate, because it IS a
- * single row: 1536 numbers against the MLP's 13.8 million per matrix.
- *
- * THIS IS THE ONE PLACE THE AREA RULE HAS TO BE BROKEN, so it is broken loudly.
- * Everywhere else a weight's on-screen area is its parameter count. A [1536]
- * vector's true second axis is `heightFor(1)` = 0.002 units, which is sub-pixel
- * at every distance and impossible to put a cursor on, so it is drawn at
- * `MIN_AXIS` instead. That inflates it by roughly 80x, and the `floored` flag
- * is what makes the slab say so: it draws with the same visible break the
- * embedding wall uses for its elided axis, because an overstatement the viewer
- * can see is honest and a silent one is not.
- *
- * The width was also wrong before this, and separately. It used `BLOCK_W` (4.2)
- * for a 1,536 wide tensor where `widthFor(1536)` is 3.0, a 40% overstatement
- * that violated `layout.ts`'s central rule with nothing in the codebase
- * flagging it.
+ * Every scope now starts at stream level rather than at branch level, so a
+ * station's TAP is inside its own scope. That matters more than it sounds:
+ * `auto-frame` measures a scope, and a norm measured without its tap is a bar
+ * floating at y = 2.5 with no visible reason to be there. Measured with it, the
+ * shot runs from the stream up to the gains, which is the whole operation.
  */
-function RmsNorm({ nodeId }: { nodeId: string }) {
-  return (
-    <TensorSlab
-      nodeId={nodeId}
-      rows={1}
-      cols={hiddenSize}
-      floored
-      size={[widthFor(hiddenSize), MIN_AXIS, SLAB_DEPTH]}
-      position={[0, BLOCK_BASELINE + MIN_AXIS / 2, 0]}
-    />
-  );
+function OnBranch({ children }: { children: React.ReactNode }) {
+  return <group position={[0, BRANCH_Y, 0]}>{children}</group>;
 }
 
+/** Never let the matrix go singular. At 1e-3 the block is a speck inside its
+ *  own plate, which is where it should be at the start of the bloom. */
+const MIN_BLOOM = 1e-3;
+
 export function Block() {
-  const focus = useTransformerStore((s) => s.focus);
-  // Taps sit in stream space rather than on the branch, so they cannot live
-  // inside the station's own scope group. They are gated by the same rule by
-  // hand: a tap belonging to a hidden station would otherwise float between the
-  // camera and whatever is being inspected.
-  const tap = (id: string) => visibleUnder(focus, id);
+  const ref = useRef<THREE.Group>(null);
+
+  // THE WHOLE BLOCK GROWS OUT OF ITS PLATE, in one line, because every station's
+  // POSITION is a child of this transform as well as its geometry. Scaling here
+  // therefore collapses the 53 unit run back to the block's own origin at the
+  // same time as it shrinks the parts, so at bloom 0 the entire interior is a
+  // point inside the plate and at 1 it is the exploded view. That is the
+  // "everything lives inside one of the blocks and expands" reading, and it
+  // arrives at exactly the rate the other 27 blocks are moving because both are
+  // driven by `view.explode`.
+  useFrame(() => {
+    const g = ref.current;
+    if (!g) return;
+    g.scale.setScalar(Math.max(MIN_BLOOM, view.explode));
+  });
 
   return (
-    <>
-      {tap("block.ln1") && <StreamTap z={STATIONS.ln1} />}
-      {tap("block.add1") && <ResidualJunction z={STATIONS.add1} />}
-      {tap("block.ln2") && <StreamTap z={STATIONS.ln2} />}
-      {tap("block.add2") && <ResidualJunction z={STATIONS.add2} />}
+    <Scope id="block">
+      {/* Scaled from the block's origin, which sits on the stream at the middle
+          of the plate's footprint. */}
+      <group ref={ref}>
+        {/* The two runs the block computes on, UNDER the baseline so the
+            stations rest on them. See `branch.tsx` for why the first attempt at
+            this had to be deleted. */}
+        <Branch />
 
-      <group position={[0, BRANCH_Y, 0]}>
         <Scope id="block.ln1" position={[0, 0, STATIONS.ln1]}>
-          <RmsNorm nodeId="block.ln1" />
+          <StreamTap z={0} />
+          <OnBranch>
+            <RmsNorm nodeId="block.ln1" label="RMSNorm" />
+          </OnBranch>
         </Scope>
 
         <Scope id="block.attn" position={[0, 0, STATIONS.attn]}>
-          <Attention />
+          <OnBranch>
+            <Attention />
+          </OnBranch>
+        </Scope>
+
+        <Scope id="block.add1" position={[0, 0, STATIONS.add1]}>
+          <ResidualJunction nodeId="block.add1" />
         </Scope>
 
         <Scope id="block.ln2" position={[0, 0, STATIONS.ln2]}>
-          <RmsNorm nodeId="block.ln2" />
+          <StreamTap z={0} />
+          <OnBranch>
+            <RmsNorm nodeId="block.ln2" label="RMSNorm" />
+          </OnBranch>
         </Scope>
 
         <Scope id="block.mlp" position={[0, 0, STATIONS.mlp]}>
-          <Mlp />
+          <OnBranch>
+            <Mlp />
+          </OnBranch>
+        </Scope>
+
+        <Scope id="block.add2" position={[0, 0, STATIONS.add2]}>
+          <ResidualJunction nodeId="block.add2" />
         </Scope>
       </group>
-    </>
+    </Scope>
   );
 }

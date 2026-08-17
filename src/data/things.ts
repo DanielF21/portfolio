@@ -69,23 +69,27 @@ export interface Thing {
 
 export const THINGS: readonly Thing[] = [
   {
-    slug: "transformer",
-    title: "Transformer",
-    blurb: "A decoder-only language model you can walk around.",
+    // `llm`, not `transformer`. A transformer is the block; what is drawn here
+    // is the whole model, an embedding and 28 of them and the embedding again.
+    // The code directories keep the older name (`src/lib/transformer`,
+    // `src/components/transformer`) because the subject of almost every file in
+    // them really is the block.
+    slug: "llm",
+    title: "Language Model",
+    blurb: "Interactive diagram of Qwen2.5-1.5B",
     shipped: "2026-08-16",
     hue: "indigo",
-    poster: { src: "/things/transformer/poster.png", width: 1600, height: 1000 },
+    poster: { src: "/things/llm/poster.png", width: 1600, height: 1000 },
     stage: "immersive",
     // Same reasoning as the planet's: three, R3F and this scene's geometry are
     // far too much to pull onto an index page for decoration.
     preview: "none",
     weight: "heavy",
-    // The poster is a real screenshot now. This stays out of the featured slot
-    // only until the written explanation exists: the scene labels every tensor
-    // with its true shape but does not yet say why any of it is shaped that
-    // way. Delete this one line to promote it.
-    feature: false,
-    tech: ["Three.js", "React Three Fiber", "Qwen2.5", "PyTorch"],
+    // No `feature: false`. It used to be held out of the featured slot until the
+    // piece explained itself rather than only labelling itself; the detail panel
+    // does that now. Being the newest `shipped` date is the whole qualification,
+    // so featuring it takes a deletion rather than a flag.
+    tech: ["Three.js", "React Three Fiber", "Qwen2.5"],
   },
   {
     slug: "planet",

@@ -1,9 +1,13 @@
 "use client";
 
+import { useCallback, useEffect, useRef } from "react";
+
 import { INDEX, OVERVIEW_ID } from "@/lib/transformer/glossary";
 import { useTransformerStore } from "@/lib/transformer/store";
 import { requestRefit } from "@/lib/transformer/view";
 import { RULE, RULE_SOFT, TEXT, TEXT_FAINT, TEXT_MUTED, accent } from "@/lib/transformer/theme";
+
+import { EncodingKey } from "./key";
 
 /**
  * The clickable index, and the piece's whole navigation model.
@@ -20,10 +24,37 @@ import { RULE, RULE_SOFT, TEXT, TEXT_FAINT, TEXT_MUTED, accent } from "@/lib/tra
  * and hover states costs nothing and makes the left third of the frame a place
  * rather than an emptiness.
  */
+/**
+ * How long the cursor must rest on an entry before the camera goes there.
+ *
+ * HOVER NAVIGATES, and this is what stops that being chaos. Reaching the key at
+ * the bottom of the panel means dragging the cursor down the whole list, and
+ * without a dwell that flies the camera through all fourteen shots on the way.
+ * Ninety milliseconds is below the threshold where a deliberate hover feels
+ * delayed and well above the time a cursor spends passing over a row.
+ */
+const DWELL_MS = 90;
+
 export function IndexPanel() {
   const focus = useTransformerStore((s) => s.focus);
   const setFocus = useTransformerStore((s) => s.setFocus);
+  const setHover = useTransformerStore((s) => s.setHover);
   const current = focus ?? OVERVIEW_ID;
+
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancel = useCallback(() => {
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = null;
+  }, []);
+  useEffect(() => cancel, [cancel]);
+
+  const go = useCallback(
+    (id: string) => {
+      setFocus(id === OVERVIEW_ID ? null : id);
+      requestRefit();
+    },
+    [setFocus]
+  );
 
   return (
     <nav
@@ -49,9 +80,26 @@ export function IndexPanel() {
               key={entry.id}
               type="button"
               aria-current={active ? "true" : undefined}
+              // THE DETAIL PANEL DOES NOT WAIT FOR THE DWELL. An index row and
+              // the geometry it names are the same destination, so pointing at
+              // either has to answer the same way; the dwell exists only to stop
+              // the CAMERA flying through fourteen shots on the way to the key,
+              // and text changing in a docked column has no such cost. Entry ids
+              // are node ids, so this is the same value the pick layer writes.
+              onPointerEnter={() => {
+                cancel();
+                setHover(entry.id);
+                timer.current = setTimeout(() => go(entry.id), DWELL_MS);
+              }}
+              onPointerLeave={() => {
+                cancel();
+                setHover(null);
+              }}
+              // Still clickable, and a click does not wait: someone who commits
+              // to the target should not be held to the dwell.
               onClick={() => {
-                setFocus(entry.id === OVERVIEW_ID ? null : entry.id);
-                requestRefit();
+                cancel();
+                go(entry.id);
               }}
               className="group flex items-baseline gap-3 px-4 py-[5px] text-left font-mono text-[11px] leading-4 tracking-[0.04em] transition-colors"
               style={{
@@ -73,6 +121,10 @@ export function IndexPanel() {
           );
         })}
       </div>
+
+      {/* Nothing in this scene is a picture of an object that exists, so the
+          vocabulary has to be stated rather than recognised. See `key.tsx`. */}
+      <EncodingKey />
     </nav>
   );
 }

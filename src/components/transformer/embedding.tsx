@@ -5,11 +5,12 @@ import * as THREE from "three";
 
 import { CONFIG } from "@/lib/transformer/config";
 import { formatCount, formatInt, formatPercent } from "@/lib/transformer/format";
-import { BRANCH_Y, STREAM_WIDTH, WIDTHS } from "@/lib/transformer/layout";
+import { STREAM_WIDTH, WIDTHS } from "@/lib/transformer/layout";
 import { DERIVED, totalParamsOf } from "@/lib/transformer/model";
 import { ACTIVATION, OP_LINE } from "@/lib/transformer/theme";
 
 import { Anchor } from "./anchor";
+import { PickBox } from "./pick";
 import { TensorSlab } from "./tensor-slab";
 
 /**
@@ -36,17 +37,49 @@ const { vocabSize, hiddenSize } = CONFIG;
 
 /** Rows drawn in each of the two real segments. Enough that the cell grid
  *  reads as a grid, few enough that they are obviously a sample. */
-const SHOWN_ROWS = 16;
+const SHOWN_ROWS = 39;
 const ROW_H = 0.14;
-const SEGMENT_H = SHOWN_ROWS * ROW_H;
-/** The break. Wide enough to read as missing rather than as a seam. */
-const GAP_H = 1.0;
 
 const WIDTH = STREAM_WIDTH;
-const TOTAL_H = SEGMENT_H * 2 + GAP_H;
+const TOTAL_H = SHOWN_ROWS * ROW_H;
+
+/**
+ * Where the break mark sits, as a fraction of the height.
+ *
+ * ONE MATRIX, MARKED, NOT TWO PIECES WITH A GAP. The elision used to be drawn as
+ * two slabs separated by a whole unit of nothing, and it read as exactly what it
+ * looks like: two matrices. It is one. A gap is the wrong convention here,
+ * because a gap is what you draw BETWEEN two objects.
+ *
+ * What a drawing uses to say "this part is shortened" is a BREAK MARK: a pair of
+ * lines across an otherwise continuous part. That keeps the thing the elision
+ * must not lose, which is that 151,936 rows are one tensor, and the true count
+ * is on the label beside it.
+ */
+const BREAK_AT = 0.5;
+const BREAK_GAP = 0.16;
+
+/**
+ * Which drawn row of the lower segment the stream leaves from.
+ *
+ * The stream must emerge from a ROW, not out of the break. Any row would do;
+ * what matters is that the wall is seated so that row lands on y = 0.
+ */
+/**
+ * The stream leaves the LAST drawn row.
+ *
+ * It was row 2, chosen only so the stream came out of a row rather than out of
+ * the break. Using the last row seats the wall so its bottom edge sits with the
+ * blocks' bottom edge instead of 1.9 units under it, which is the whole of "the
+ * embedding and LM head are not centred with the transformer blocks". The stream
+ * still leaves a real row; it is now the bottom one.
+ */
+const STREAM_ROW = SHOWN_ROWS - 1;
+export const WALL_Y = (STREAM_ROW + 0.5) * ROW_H - TOTAL_H / 2;
 
 interface Props {
-  /** "in" is the token lookup, "out" is the tied output projection. */
+  /** "in" is the token lookup at the start; "out" is the tied projection at the
+   *  end. Same tensor, same geometry, opposite directions. */
   role: "in" | "out";
   z: number;
 }
@@ -54,58 +87,58 @@ interface Props {
 export function Embedding({ role, z }: Props) {
   const tied = CONFIG.tieWordEmbeddings;
   const params = totalParamsOf("embed");
+  const lookup = role === "in";
 
-  const breakEdges = useMemo(() => {
-    const box = new THREE.BoxGeometry(WIDTH, GAP_H, 0.4);
-    const edges = new THREE.EdgesGeometry(box);
-    box.dispose();
-    return edges;
+  /** Two lines across the face: the drafting mark for a shortened part. */
+  const breakMark = useMemo(() => {
+    const y = TOTAL_H * (BREAK_AT - 0.5);
+    const x = WIDTH / 2;
+    const pts = [
+      -x, y + BREAK_GAP / 2, 0, x, y + BREAK_GAP / 2, 0,
+      -x, y - BREAK_GAP / 2, 0, x, y - BREAK_GAP / 2, 0,
+    ];
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    return g;
   }, []);
-  useEffect(() => () => breakEdges.dispose(), [breakEdges]);
-
-  const text = role === "in" ? "Token embedding" : "LM head";
-  const sub =
-    role === "in"
-      ? `${formatInt(vocabSize)} × ${formatInt(hiddenSize)} · ${formatCount(params)} params · ${formatPercent(DERIVED.embedShareOfModel)} of the model`
-      : tied
-        ? "the same tensor, transposed · 0 extra params"
-        : `${formatInt(vocabSize)} × ${formatInt(hiddenSize)}`;
+  useEffect(() => () => breakMark.dispose(), [breakMark]);
 
   return (
-    <group position={[0, BRANCH_Y, z]}>
+    <group position={[0, WALL_Y, z]}>
+      {/* ONE TENSOR, DRAWN AT BOTH ENDS, and that is not the same mistake as
+          before. Reading order beats the loop: a model runs input to output, and
+          drawing it as a ring put both ends of it at the near end of the stack
+          with only a norm at the far one. The tie is a fact about MEMORY, not
+          about dataflow, so it belongs in the accounting rather than in the
+          shape: `model.ts` gives the LM head `params: 0` and `tiedTo: "embed"`,
+          the card says "the same tensor, transposed", and the total stays
+          1.54B rather than the 1.78B you get by counting it twice. */}
+
       {/* Upper segment: the first rows of the vocabulary. */}
       <TensorSlab
-        nodeId={role === "in" ? "embed" : "lm_head"}
+        nodeId={lookup ? "embed" : "lm_head"}
         rows={SHOWN_ROWS}
         cols={hiddenSize}
-        size={[WIDTH, SEGMENT_H, 0.4]}
-        position={[0, GAP_H / 2 + SEGMENT_H / 2, 0]}
+        size={[WIDTH, TOTAL_H, 0.4]}
       />
 
-      {/* Lower segment: the last rows. */}
-      <TensorSlab
-        nodeId={role === "in" ? "embed" : "lm_head"}
-        rows={SHOWN_ROWS}
-        cols={hiddenSize}
-        size={[WIDTH, SEGMENT_H, 0.4]}
-        position={[0, -(GAP_H / 2 + SEGMENT_H / 2), 0]}
-      />
-
-      {/* The break itself, outlined so the gap reads as rows removed from one
-          tensor rather than as two separate tensors stacked up. */}
-      <lineSegments geometry={breakEdges}>
-        <lineBasicMaterial color={OP_LINE} transparent opacity={0.5} />
+      {/* The break mark. See `BREAK_AT`. */}
+      <lineSegments geometry={breakMark} position={[0, 0, 0.21]}>
+        <lineBasicMaterial color={OP_LINE} transparent opacity={0.85} />
       </lineSegments>
 
-      {/* One row, pulled forward: the token you looked up. An embedding is a
-          lookup, not a computation, and this is the whole of it. */}
-      {role === "in" && (
-        <mesh position={[0, -GAP_H / 2 - ROW_H * 2, 0.42]}>
+      {/* The row the stream leaves from, lit. An embedding is a LOOKUP, not a
+          computation, and this is the whole of it: one row of the wall becomes
+          the residual stream. Placed at -WALL_Y so it lands on y = 0, and pushed
+          toward the model rather than away from it, so the highlighted row and
+          the conduit leaving it are the same line. */}
+      {lookup && (
+        <mesh position={[0, -WALL_Y, -0.34]}>
           <boxGeometry args={[WIDTH, ROW_H, 0.28]} />
           <meshStandardMaterial
             color={ACTIVATION}
             emissive={ACTIVATION}
-            emissiveIntensity={0.5}
+            emissiveIntensity={0.6}
             roughness={0.4}
           />
         </mesh>
@@ -113,13 +146,19 @@ export function Embedding({ role, z }: Props) {
 
       <Anchor
         overview
-        id={`embed.${role}`}
-        text={text}
-        sub={sub}
+        id={lookup ? "embed" : "lm_head"}
+        text={lookup ? "Token embedding" : "LM head"}
+        sub={
+          lookup
+            ? `${formatInt(vocabSize)} × ${formatInt(hiddenSize)} · ${formatCount(params)} params · ${formatPercent(DERIVED.embedShareOfModel)} of the model`
+            : tied
+              ? "the same tensor, transposed · 0 extra params"
+              : `${formatInt(vocabSize)} × ${formatInt(hiddenSize)}`
+        }
         position={[WIDTH / 2, TOTAL_H / 2, 0]}
       />
       <Anchor
-        id={`embed.${role}.break`}
+        id={`${lookup ? "embed" : "lm_head"}.break`}
         text={`${formatInt(vocabSize)} rows`}
         sub="drawn with a break: not to scale on this axis"
         position={[WIDTH / 2, 0, 0]}

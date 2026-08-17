@@ -5,9 +5,11 @@ import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 import { distanceFor, screenHalfExtents } from "@/lib/transformer/camera";
-import { OVERVIEW_ID, entryById } from "@/lib/transformer/glossary";
+import { OVERVIEW_ID, entryById, inFocus } from "@/lib/transformer/glossary";
 import { useTransformerStore } from "@/lib/transformer/store";
 import { view } from "@/lib/transformer/view";
+
+import { SCOPE_KEY } from "./scope";
 
 /**
  * Points the camera at whatever is currently in scope, by MEASURING it.
@@ -31,22 +33,49 @@ import { view } from "@/lib/transformer/view";
  * local offset. Reading the scene graph cannot drift, because it IS the thing
  * being framed.
  *
- * TIMING. Focus changes, React unmounts the out-of-scope `Scope`s, and only
- * then is the graph the thing we want to measure. So the measurement is
- * deferred to the first frame after the change rather than run in the effect
- * that observes it.
+ * TIMING. Focus changes, React commits whatever that mounted (opening a block
+ * mounts the whole interior), and only then is the graph the thing we want to
+ * measure. So the measurement is deferred to the first frame after the change
+ * rather than run in the effect that observes it.
  */
 
-/** Objects flagged this way are never part of a subject: the ground plane, and
- *  anything else that spans the scene rather than sitting in it. */
-function measurable(o: THREE.Object3D): boolean {
+/**
+ * Which named region a mesh belongs to, or null if it sits outside all of them.
+ *
+ * The nearest tagged ancestor wins, so a slab inside `block.attn.qkv` reports
+ * that rather than `block`, and the plates and the two ends of the model (which
+ * are in no scope at all) report null.
+ */
+function scopeOf(o: THREE.Object3D): string | null {
   for (let n: THREE.Object3D | null = o; n; n = n.parent) {
-    // `Box3.setFromObject` reads geometry regardless of `visible`, so hidden
-    // things have to be excluded by hand or the plate field is measured while a
-    // station is isolated and every close-up frames the whole stack.
+    const path = n.userData[SCOPE_KEY];
+    if (typeof path === "string") return path;
+  }
+  return null;
+}
+
+/**
+ * Whether this mesh is part of the subject being framed.
+ *
+ * THE SUBJECT IS NOW A SUBTREE, NOT "WHATEVER IS ON SCREEN". It used to be the
+ * latter, and that was only correct because focusing removed everything else;
+ * with the whole model drawn at all times, measuring what is visible would frame
+ * the entire stack from every station. So membership is decided by scope path.
+ *
+ * ANCESTORS ARE EXCLUDED, descendants included. `inFocus` is the rule; the trap
+ * it avoids is that the `block` group physically contains all forty-one units of
+ * stations, so counting it while focused on one of them frames the lot.
+ */
+function measurable(o: THREE.Object3D, focus: string | null): boolean {
+  for (let n: THREE.Object3D | null = o; n; n = n.parent) {
+    // `Box3.setFromObject` reads geometry regardless of `visible`, so anything
+    // hidden has to be excluded by hand. `noFit` is for things that span the
+    // scene rather than sit in it: the ground plane and the stream conduit.
     if (!n.visible || n.userData.noFit) return false;
   }
-  return true;
+  if (focus === null || focus === OVERVIEW_ID) return true;
+  const scope = scopeOf(o);
+  return scope !== null && inFocus(focus, scope);
 }
 
 export function AutoFrame() {
@@ -54,6 +83,22 @@ export function AutoFrame() {
   const focus = useTransformerStore((s) => s.focus);
 
   const pending = useRef(true);
+  /**
+   * Frames to let pass after a request before measuring.
+   *
+   * SUBSCRIPTION ORDER IS NOT SOMETHING TO REASON ABOUT. `useFrame` callbacks run
+   * in the order they subscribed, and `Block` subscribes AFTER this one because
+   * it is mounted conditionally, one commit later. So on any given frame the
+   * block's world scale is the one applied on the PREVIOUS frame, and measuring
+   * immediately after the bloom settles returned a block about 1% short every
+   * time. Waiting a frame makes that exact instead of nearly right, and it costs
+   * one frame of a flight that takes fifty.
+   *
+   * A frame counter rather than a check on any particular component, because the
+   * next thing to animate a transform in a useFrame will hit this too and should
+   * not have to know about it.
+   */
+  const settle = useRef(0);
   const seenRefit = useRef(view.refit);
   const seenSize = useRef<[number, number]>([0, 0]);
   const box = useMemo(() => new THREE.Box3(), []);
@@ -63,6 +108,13 @@ export function AutoFrame() {
 
   useEffect(() => {
     pending.current = true;
+    settle.current = 1;
+    // CLEAR THE BRACKETS AT ONCE, not when the next measurement lands. The fit
+    // waits for the bloom to settle, so on the way out of a station the marker
+    // was still sitting on geometry that had already gone, and it lingered into
+    // the stack view for the length of the collapse. The brackets belong to a
+    // measurement; the moment the focus changes there is no current one.
+    view.focusBox = null;
   }, [focus]);
 
   useFrame(() => {
@@ -70,6 +122,7 @@ export function AutoFrame() {
     if (view.refit !== seenRefit.current) {
       seenRefit.current = view.refit;
       pending.current = true;
+      settle.current = 1;
     }
 
     // A resize changes the aspect ratio, and the aspect ratio is half of what
@@ -85,6 +138,25 @@ export function AutoFrame() {
     // The overlay writes `view.width/height` from the canvas each frame; before
     // the first one there is no aspect ratio to fit against.
     if (view.width === 0 || view.height === 0) return;
+
+    // WAIT FOR THE BLOOM. The block's interior is scaled by `view.explode`, so
+    // measuring it while it is opening measures whatever fraction of itself it
+    // had reached and the camera lands that fraction too close. The same is true
+    // in reverse for the overview, whose subject is 28 plates travelling 23
+    // units each.
+    //
+    // The cost is that the camera holds still until the stack has settled, which
+    // is about 0.4s at `EXPLODE_LAMBDA`, and that turns out to be the better
+    // sequence anyway: the block visibly opens where it stands, and only then
+    // does the camera go to it. Station to station inside an already open block
+    // there is nothing to wait for, since the bloom is already at 1.
+    if (Math.abs(view.explode - view.explodeTo) > 0.01) return;
+
+    // One frame for whoever writes transforms after this callback. See `settle`.
+    if (settle.current > 0) {
+      settle.current -= 1;
+      return;
+    }
 
     const entry = entryById(focus ?? OVERVIEW_ID);
     if (!entry) {
@@ -105,7 +177,7 @@ export function AutoFrame() {
     let found = false;
     scene.traverse((o) => {
       if (!(o as THREE.Mesh).isMesh) return;
-      if (!measurable(o)) return;
+      if (!measurable(o, focus)) return;
       item.setFromObject(o);
       if (item.isEmpty()) return;
       box.union(item);
@@ -117,6 +189,21 @@ export function AutoFrame() {
 
     box.getSize(size);
     box.getCenter(centre);
+
+    // Hand the measured bounds to the focus marker, so the brackets sit on
+    // exactly what the camera framed rather than on a second guess at it.
+    //
+    // Not for the two whole-object shots. The marker exists to pick one thing
+    // out of several in frame, and at the overview and at "One block" the
+    // measured box IS the frame, so its corners land on the four edges of the
+    // viewport and read as chrome rather than as a mark on anything.
+    view.focusBox =
+      focus === null || focus === OVERVIEW_ID || focus === "block"
+        ? null
+        : {
+            min: [box.min.x, box.min.y, box.min.z],
+            max: [box.max.x, box.max.y, box.max.z],
+          };
 
     const { theta, phi, fov, fill } = entry.view;
     const aspect = view.width / view.height;

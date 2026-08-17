@@ -5,7 +5,7 @@ import * as THREE from "three";
 
 import { CONFIG } from "@/lib/transformer/config";
 import { formatBytes, formatInt, formatRatio } from "@/lib/transformer/format";
-import { SEQ_TOKENS } from "@/lib/transformer/layout";
+import { CACHE_TOKENS } from "@/lib/transformer/layout";
 import { DERIVED } from "@/lib/transformer/model";
 import { useTransformerStore } from "@/lib/transformer/store";
 import { CACHE, CACHE_DIM, OP_LINE } from "@/lib/transformer/theme";
@@ -34,8 +34,9 @@ import { Anchor } from "./anchor";
  */
 
 const N_LAYERS = CONFIG.numHiddenLayers;
-/** Columns drawn. Beyond the prompt there is room to watch decode extend it. */
-const MAX_TOKENS = SEQ_TOKENS + 8;
+/** Columns drawn. Shared with the store, which stops decode at the same number
+ *  so the count and the grid cannot disagree. See `CACHE_TOKENS`. */
+const MAX_TOKENS = CACHE_TOKENS;
 
 const CELL = 0.26;
 const GRID_W = MAX_TOKENS * CELL;

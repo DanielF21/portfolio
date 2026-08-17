@@ -13,7 +13,7 @@ import { revealDelay } from "@/lib/utils";
 /**
  * Home: a short statement, the writing, then the things.
  *
- * Writing sits above Things now, and the newest series gets a card at full size
+ * Writing sits above Things, and the newest series gets a card at full size
  * rather than three loose rows at the bottom of the page. The two sections are
  * deliberately in different registers: a series is one body of work with an
  * order, so it shows its parts; the toys are individually interesting, so they
@@ -22,6 +22,20 @@ import { revealDelay } from "@/lib/utils";
  * Server component. The only client code on this page is the preview layer
  * inside each thing tile, which is lazy and only wakes on demand.
  */
+
+/**
+ * WRITING IS TEMPORARILY HIDDEN, here and in `NAV` in `data/site.ts`. Those two
+ * are the whole of it.
+ *
+ * Nothing was deleted: `/writing` and every document under it still build, still
+ * render and are still in the sitemap, so any link already pointing at one keeps
+ * working. This only takes the section off the home page. A flag rather than a
+ * commented out block, because the block reads `series`, `singles` and
+ * `writingCount`, and commenting it out would leave those computed and unused,
+ * which lint would rightly complain about. Flip this to `true` and uncomment the
+ * one line in `NAV` to put it all back.
+ */
+const SHOW_WRITING = false;
 export default async function Page() {
   const featured = featuredThing();
   const rest = restOfThings();
@@ -68,7 +82,7 @@ export default async function Page() {
           </ul>
         </header>
 
-        {writingCount > 0 && (
+        {SHOW_WRITING && writingCount > 0 && (
           <section aria-labelledby="writing-heading" className="flex flex-col gap-6">
             <div className="flex items-baseline justify-between gap-4">
               <h2

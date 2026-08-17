@@ -2,18 +2,30 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
-import { visibleUnder } from "@/lib/transformer/glossary";
-import { useTransformerStore } from "@/lib/transformer/store";
-
 /**
- * The scope path a subtree sits in.
+ * A named region of the scene.
  *
- * Exists so an `Anchor` can know what it belongs to without being told. Labels
- * need to appear one level down from whatever you are looking at (looking at a
- * block names its stations, looking at a station names its tensors), and the
- * alternative to reading it from the tree is a `level` prop on all twenty-three
- * call sites that would then have to be kept in step with where the component
- * is actually mounted.
+ * TWO JOBS, AND IT USED TO HAVE A THIRD. It provides its dotted path to
+ * everything under it, and it tags its group so the camera can find that subtree
+ * by name. What it no longer does is unmount its children when they are out of
+ * scope.
+ *
+ * WHY THAT WENT. Removing the siblings is what made every station legible on its
+ * own, and it is also what made the piece unreadable to anyone who did not
+ * already know the answer. Clicking "RMSNorm" produced a bar on a stick in an
+ * empty frame; clicking "Scores, and the mask" produced a staircase belonging to
+ * nothing. There was no way to tell from the picture where either thing sat, what
+ * fed it, or what it fed. Isolation solved a rendering problem by destroying the
+ * only thing the drawing was for.
+ *
+ * The rendering problem was real and is now solved where it belongs, in the
+ * geometry: `layout.ts` spaces the stations far enough apart that a camera
+ * standing off the station axis separates them, and `glossary.ts` puts every
+ * in-block camera at that azimuth. See the note on `STATION_SEQUENCE` for the
+ * arithmetic.
+ *
+ * `position` is taken here rather than by a wrapping group so that a scope and
+ * its placement stay one node.
  */
 const ScopeContext = createContext<string>("");
 
@@ -21,17 +33,10 @@ export function useScopePath(): string {
   return useContext(ScopeContext);
 }
 
-/**
- * Draws its children only when they are in scope for the current focus.
- *
- * One component and one rule, applied everywhere, so nothing has to know which
- * particular sibling might be in the way. See `glossary.ts` for why hiding
- * siblings is necessary rather than tidy.
- *
- * `position` is taken here rather than by a wrapping group so that a scope and
- * its placement stay one node; a scope that renders nothing should not leave an
- * empty transform behind.
- */
+/** The key `auto-frame` and the focus marker look for when walking up from a
+ *  mesh to find out which named region it belongs to. */
+export const SCOPE_KEY = "scopePath";
+
 export function Scope({
   id,
   position,
@@ -41,11 +46,11 @@ export function Scope({
   position?: [number, number, number];
   children: ReactNode;
 }) {
-  const focus = useTransformerStore((s) => s.focus);
-  if (!visibleUnder(focus, id)) return null;
   return (
     <ScopeContext.Provider value={id}>
-      <group position={position ?? [0, 0, 0]}>{children}</group>
+      <group position={position ?? [0, 0, 0]} userData={{ [SCOPE_KEY]: id }}>
+        {children}
+      </group>
     </ScopeContext.Provider>
   );
 }
