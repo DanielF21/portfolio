@@ -31,6 +31,8 @@ import {
   accent,
 } from "@/lib/transformer/theme";
 
+import { EncodingKey } from "./key";
+
 /**
  * The one detail surface, down the right hand side.
  *
@@ -102,8 +104,10 @@ export function DetailPanel() {
     <aside
       ref={scroller}
       aria-label="Detail"
-      className="flex min-h-0 flex-col overflow-y-auto overscroll-contain"
-      style={{ borderLeft: `1px solid ${RULE}`, background: SURFACE }}
+      // Below `lg` this is the bottom row rather than the right column, so the
+      // rule that separates it from the canvas moves from one edge to the other.
+      className="flex min-h-0 min-w-0 flex-col overflow-y-auto overscroll-contain border-t lg:border-l lg:border-t-0"
+      style={{ borderColor: RULE, background: SURFACE }}
     >
       <div
         className="sticky top-0 px-4 py-3"
@@ -219,6 +223,10 @@ export function DetailPanel() {
           </div>
         )}
       </div>
+
+      {/* The key, on the layouts where the index is a strip and cannot hold it.
+          `mt-auto` inside it pins it to the bottom of the column. */}
+      <EncodingKey className="lg:hidden" />
     </aside>
   );
 }

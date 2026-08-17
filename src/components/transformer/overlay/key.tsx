@@ -48,10 +48,13 @@ function Term({ swatch, children }: { swatch: React.CSSProperties; children: str
   );
 }
 
-export function EncodingKey() {
+export function EncodingKey({ className = "" }: { className?: string }) {
   return (
     <div
-      className="mt-auto px-4 py-2.5"
+      // `className` is how it gets shown in one column and hidden in the other:
+      // the index carries it where there is a column to carry it, the detail
+      // panel carries it on a phone. See `index-panel.tsx`.
+      className={`mt-auto px-4 py-2.5 ${className}`}
       style={{ borderTop: `1px solid ${RULE_SOFT}` }}
     >
       <div

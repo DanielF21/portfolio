@@ -41,6 +41,19 @@ export function IndexPanel() {
   const setHover = useTransformerStore((s) => s.setHover);
   const current = focus ?? OVERVIEW_ID;
 
+  /**
+   * Keep the current entry in view.
+   *
+   * It matters most in the strip, where fourteen entries are far wider than a
+   * phone and selecting from the 3D would otherwise mark a chip nobody can see.
+   * It is right in the column too, for the same reason at the bottom of a short
+   * window. `nearest` on both axes so it scrolls the minimum and never the page.
+   */
+  const activeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [current]);
+
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancel = useCallback(() => {
     if (timer.current !== null) clearTimeout(timer.current);
@@ -57,13 +70,23 @@ export function IndexPanel() {
   );
 
   return (
+    /**
+     * A COLUMN WHEN THERE IS ROOM, A STRIP WHEN THERE IS NOT. Below `lg` the
+     * body stacks and this becomes a horizontally scrolling row of the same
+     * fourteen entries, which is the one shape that costs a phone almost no
+     * height. Nothing about the entries changes: same order, same ordinals, same
+     * indent, same active mark, only turned through ninety degrees.
+     */
     <nav
       aria-label="Model index"
-      className="flex min-h-0 flex-col overflow-y-auto overscroll-contain"
-      style={{ borderRight: `1px solid ${RULE}` }}
+      // The rule moves with the layout: underneath the strip, beside the column.
+      // It is a Tailwind width plus an inline COLOUR because the palette is a JS
+      // value and a breakpoint is not expressible in an inline style.
+      className="flex min-h-0 min-w-0 flex-row overflow-x-auto overflow-y-hidden overscroll-contain border-b lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:border-b-0 lg:border-r"
+      style={{ borderColor: RULE }}
     >
       <div
-        className="flex items-baseline justify-between px-4 py-3 font-mono text-[10px] uppercase tracking-[0.16em]"
+        className="hidden items-baseline justify-between px-4 py-3 font-mono text-[10px] uppercase tracking-[0.16em] lg:flex"
         style={{ borderBottom: `1px solid ${RULE_SOFT}`, color: accent(0.75) }}
       >
         <span>Index</span>
@@ -72,7 +95,7 @@ export function IndexPanel() {
         </span>
       </div>
 
-      <div className="flex flex-col py-1">
+      <div className="flex shrink-0 flex-row py-0 lg:flex-col lg:py-1">
         {INDEX.map((entry, i) => {
           const active = current === entry.id;
           return (
@@ -101,11 +124,15 @@ export function IndexPanel() {
                 cancel();
                 go(entry.id);
               }}
-              className="group flex items-baseline gap-3 px-4 py-[5px] text-left font-mono text-[11px] leading-4 tracking-[0.04em] transition-colors"
+              ref={active ? activeRef : undefined}
+              // The active mark is an EDGE, and which edge depends on the
+              // layout: under the chip in a strip, beside the row in a column.
+              // Same two pixels either way.
+              className="group flex shrink-0 items-baseline gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-left font-mono text-[11px] leading-4 tracking-[0.04em] transition-colors lg:gap-3 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-[5px]"
               style={{
                 color: active ? TEXT : TEXT_MUTED,
                 background: active ? accent(0.14) : "transparent",
-                borderLeft: `2px solid ${active ? accent(1) : "transparent"}`,
+                borderColor: active ? accent(1) : "transparent",
               }}
             >
               <span
@@ -114,7 +141,9 @@ export function IndexPanel() {
               >
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <span style={{ paddingLeft: `${entry.depth * 12}px` }}>
+              {/* The indent says what is inside what, and a strip has no room to
+                  spend on it. */}
+              <span className="lg:pl-[var(--depth)]" style={{ ["--depth" as string]: `${entry.depth * 12}px` }}>
                 {entry.label}
               </span>
             </button>
@@ -123,8 +152,12 @@ export function IndexPanel() {
       </div>
 
       {/* Nothing in this scene is a picture of an object that exists, so the
-          vocabulary has to be stated rather than recognised. See `key.tsx`. */}
-      <EncodingKey />
+          vocabulary has to be stated rather than recognised. See `key.tsx`.
+
+          It cannot live in a horizontal strip, so below `lg` the detail panel
+          carries it instead. Stated somewhere is the requirement; stated here is
+          not. */}
+      <EncodingKey className="hidden lg:block" />
     </nav>
   );
 }

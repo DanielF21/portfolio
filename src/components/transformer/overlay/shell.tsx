@@ -22,14 +22,24 @@ import { DetailPanel } from "./detail-panel";
 import { IndexPanel } from "./index-panel";
 
 /**
- * The two side columns, and the ratio between them.
+ * The body's shape, and it is two shapes.
  *
- * The index holds labels; the detail panel holds sentences, so it is set at
- * 1.75x the index. Both are `minmax`, so a narrow window shrinks them rather
- * than crushing the viewport between them.
+ * WIDE: three columns. The index holds labels, the detail panel holds sentences,
+ * so the detail is 1.75x the index. Both are `minmax`, so a narrowing window
+ * shrinks them rather than crushing the viewport between them.
+ *
+ * NARROW: three ROWS, and this is not a nicety. The two columns have floors of
+ * 180 and 315 pixels, which is 495 before the canvas gets anything at all, so on
+ * a 390 pixel phone the panels took the whole frame and the model was not on
+ * screen. Stacked, each surface gets the full width and the diagram gets the
+ * larger share of the height, since it is the thing.
+ *
+ * The switch is at `lg` rather than `md`: at 768 the three columns leave the
+ * canvas 273 pixels, which is technically a layout and not a usable one.
  */
-const INDEX_COL = "minmax(180px, 15rem)";
-const DETAIL_COL = "minmax(315px, 26.25rem)";
+const COLUMNS =
+  "grid-rows-[auto_minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-rows-1 " +
+  "lg:grid-cols-[minmax(180px,15rem)_minmax(0,1fr)_minmax(315px,26.25rem)]";
 
 /**
  * The instrument the model sits inside.
@@ -104,43 +114,53 @@ export function Shell({ onExit, children, ready }: Props) {
     requestRefit();
   };
 
+  // The frame's inset shrinks on a phone. Sixteen pixels a side is 8% of a 390
+  // pixel screen, taken from the axis with none to give.
   return (
-    <div className="absolute inset-4 flex" style={{ border: `1px solid ${FRAME}` }}>
+    <div
+      className="absolute inset-2 flex sm:inset-4"
+      style={{ border: `1px solid ${FRAME}` }}
+    >
       <div
         className="grid min-h-0 min-w-0 flex-1"
         style={{ gridTemplateRows: "auto minmax(0,1fr) auto" }}
       >
         {/* Header: identity, and every figure in it is derived. */}
         <header
-          className="flex items-center justify-between gap-4 px-4 py-3"
+          className="flex items-center justify-between gap-3 px-3 py-2 sm:gap-4 sm:px-4 sm:py-3"
           style={{ borderBottom: `1px solid ${RULE}` }}
         >
-          <div className="flex items-baseline gap-4">
+          <div className="flex min-w-0 items-baseline gap-4">
             <span
-              className="font-mono text-[12px] uppercase tracking-[0.2em]"
+              className="font-mono text-[11px] uppercase tracking-[0.2em] sm:text-[12px]"
               style={{ color: TEXT }}
             >
               {CONFIG.name}
             </span>
-            <Meta>
-              {formatCount(DERIVED.paramsTotal)} params ·{" "}
-              {CONFIG.numHiddenLayers} layers · {formatBytes(DERIVED.weightBytes)}
-            </Meta>
+            {/* The totals are the first thing to go when there is no room: the
+                detail panel opens on them anyway. */}
+            <span className="hidden md:inline">
+              <Meta>
+                {formatCount(DERIVED.paramsTotal)} params ·{" "}
+                {CONFIG.numHiddenLayers} layers ·{" "}
+                {formatBytes(DERIVED.weightBytes)}
+              </Meta>
+            </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={home}
-              className="px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors"
+              className="px-2 py-1 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors sm:px-3"
               style={{ border: `1px solid ${RULE}`, color: TEXT_MUTED }}
             >
-              Reset view
+              Reset<span className="hidden sm:inline"> view</span>
             </button>
             <button
               type="button"
               onClick={onExit}
-              className="px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors"
+              className="px-2 py-1 font-mono text-[10px] uppercase tracking-[0.16em] transition-colors sm:px-3"
               style={{ border: `1px solid ${RULE}`, color: TEXT_MUTED }}
             >
               Exit
@@ -153,12 +173,7 @@ export function Shell({ onExit, children, ready }: Props) {
             canvas rather than covering it, and `auto-frame` re-fits when they
             do. That is the point of the whole arrangement: nothing that
             describes the model is ever drawn on top of it. */}
-        <div
-          className="grid min-h-0 min-w-0"
-          style={{
-            gridTemplateColumns: `${INDEX_COL} minmax(0,1fr) ${DETAIL_COL}`,
-          }}
-        >
+        <div className={`grid min-h-0 min-w-0 ${COLUMNS}`}>
           <IndexPanel />
 
           {/* THE VIEWPORT CELL. min-h-0 / min-w-0 / overflow-hidden are what stop
@@ -172,8 +187,11 @@ export function Shell({ onExit, children, ready }: Props) {
               {children}
             </div>
 
-            {/* Breadcrumb, top left of the viewport, over the canvas. */}
-            <div className="pointer-events-none absolute left-4 top-3">
+            {/* Breadcrumb, top left of the viewport, over the canvas. Hidden on
+                a phone: the status bar already names where you are, and over a
+                canvas this short it is one of three things competing for the top
+                left corner. */}
+            <div className="pointer-events-none absolute left-3 top-2 hidden sm:block sm:left-4 sm:top-3">
               <span
                 className="font-mono text-[10px] tracking-[0.08em]"
                 style={{ color: accent(0.55) }}
@@ -188,7 +206,7 @@ export function Shell({ onExit, children, ready }: Props) {
                 nothing you can see. */}
             {(focus === null || focus === OVERVIEW_ID || focus === "block") && (
               <div
-                className="absolute left-4 top-10 flex items-center gap-2 px-2 py-1"
+                className="absolute left-3 top-2 flex items-center gap-2 px-2 py-1 sm:left-4 sm:top-10"
                 style={{ background: SURFACE, border: `1px solid ${RULE}` }}
               >
                 <Meta>
@@ -220,7 +238,7 @@ export function Shell({ onExit, children, ready }: Props) {
                 fills every column at once, decode adds one at a time. */}
             {focus === "kv" && (
               <div
-                className="absolute bottom-8 left-8 flex items-center gap-4 px-3 py-2"
+                className="absolute bottom-3 left-3 flex items-center gap-4 px-3 py-2 sm:bottom-8 sm:left-8"
                 style={{ background: SURFACE, border: `1px solid ${RULE}` }}
               >
                 <div className="flex gap-3">
