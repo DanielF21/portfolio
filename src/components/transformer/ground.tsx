@@ -32,11 +32,12 @@ import { BACKGROUND, GROUND_LINE } from "@/lib/transformer/theme";
 /** Half extent in world units. Wide enough to run past the model at every
  *  authored pose without the edge entering frame. */
 const HALF = 130;
-/** World units per fine cell. One unit reads as a unit, which is the point. */
+/** World units per cell. One unit reads as a unit, which is the point. */
 const CELL = 1;
-/** Every fifth line is brighter, so the eye can count without the fine grid
- *  having to stay resolvable. */
-const SECTION = 5;
+/** Rules are drawn every this many cells, and only there. Ten units apart is
+ *  sparse enough to read as a plate's construction lines rather than as a grid
+ *  to count squares on. */
+const SECTION = 10;
 
 const VERT = /* glsl */ `
 varying vec2 vXz;
@@ -68,12 +69,20 @@ float lines(vec2 p, float step) {
   return line * (1.0 - smoothstep(0.3, 0.7, max(fw.x, fw.y)));
 }
 
+/* One line where the coordinate crosses zero, a pixel wide at any distance. */
+float axis(float p) {
+  return 1.0 - min(abs(p) / fwidth(p), 1.0);
+}
+
 void main() {
-  float fine = lines(vXz, uCell);
   float section = lines(vXz, uCell * uSection);
 
-  // Section lines carry, fine lines fill in near the camera.
-  float a = max(section, fine * 0.45);
+  /* THE FINE GRID IS GONE. A dense grid receding into fog is the floor of the
+     piece this one was built in answer to, and it was the last thing in the
+     scene still borrowed from it. What is left is a plate's furniture: rules at
+     the section pitch only, and a centreline along the axis the model runs on,
+     which is what a drawing puts under an object rather than a workbench. */
+  float a = max(section * 0.55, axis(vXz.x) * 0.9);
 
   // Radial falloff, so the plane has no visible edge. Squared for a softer
   // shoulder: a linear fade leaves a discernible ring where it reaches zero.

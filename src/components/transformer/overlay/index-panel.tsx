@@ -10,19 +10,23 @@ import { RULE, RULE_SOFT, TEXT, TEXT_FAINT, TEXT_MUTED, accent } from "@/lib/tra
 import { EncodingKey } from "./key";
 
 /**
- * The clickable index, and the piece's whole navigation model.
+ * The contents of the plate, and the piece's whole navigation model.
  *
  * Selecting an entry sets `focus` and asks for a re-frame. It never touches
  * `view.current`, and it never computes a pose: `auto-frame` measures what is in
  * scope and writes `view.desired`, which the rig chases. That is what lets a
  * drag take over mid-flight with no state to cancel and no mode to escape from.
  *
- * This is a REGION now rather than fourteen lines of text floating on the
- * canvas. The difference is not decoration: an unbacked column of 11px labels
- * over a 3D scene reads as debug output, and it was a large part of why the
- * piece looked unfinished. Giving it a surface, a rule down its edge, ordinals
- * and hover states costs nothing and makes the left third of the frame a place
- * rather than an emptiness.
+ * IT IS CONTENTS NOW, NOT AN INDEX PANEL, and the difference is the point. What
+ * stood here was `INDEX` over `14 PARTS`, two digit ordinals in a gutter, and
+ * fourteen rows of wide-tracked mono capitals with an accent bar down the active
+ * one. That is gpu.kylejeong.com's component index, down to the phrasing, and it
+ * is most of why the two pieces read as the same instrument.
+ *
+ * A printed contents list instead: names in the text face, indented by depth,
+ * figure numbers in mono because they are numbers, a dotted leader between them
+ * where there is width for one, and the current figure marked by setting its
+ * name in the signal colour rather than by painting a bar beside it.
  */
 /**
  * How long the cursor must rest on an entry before the camera goes there.
@@ -86,13 +90,10 @@ export function IndexPanel() {
       style={{ borderColor: RULE }}
     >
       <div
-        className="hidden items-baseline justify-between px-4 py-3 font-mono text-[10px] uppercase tracking-[0.16em] lg:flex"
-        style={{ borderBottom: `1px solid ${RULE_SOFT}`, color: accent(0.75) }}
+        className="hidden px-4 pb-2 pt-3 text-[13px] font-medium leading-5 lg:block"
+        style={{ borderBottom: `1px solid ${RULE_SOFT}`, color: TEXT }}
       >
-        <span>Index</span>
-        <span style={{ color: TEXT_FAINT }}>
-          {String(INDEX.length).padStart(2, "0")} parts
-        </span>
+        Contents
       </div>
 
       <div className="flex shrink-0 flex-row py-0 lg:flex-col lg:py-1">
@@ -128,23 +129,29 @@ export function IndexPanel() {
               // The active mark is an EDGE, and which edge depends on the
               // layout: under the chip in a strip, beside the row in a column.
               // Same two pixels either way.
-              className="group flex shrink-0 items-baseline gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-left font-mono text-[11px] leading-4 tracking-[0.04em] transition-colors lg:gap-3 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-[5px]"
-              style={{
-                color: active ? TEXT : TEXT_MUTED,
-                background: active ? accent(0.14) : "transparent",
-                borderColor: active ? accent(1) : "transparent",
-              }}
+              className="group flex shrink-0 items-baseline gap-2 whitespace-nowrap px-3 py-2 text-left text-[13px] leading-5 transition-colors lg:w-full lg:gap-2 lg:px-4 lg:py-[3px]"
+              style={{ color: active ? accent(1) : TEXT_MUTED }}
             >
-              <span
-                className="shrink-0 tabular-nums"
-                style={{ color: active ? accent(0.9) : TEXT_FAINT }}
-              >
-                {String(i + 1).padStart(2, "0")}
-              </span>
               {/* The indent says what is inside what, and a strip has no room to
                   spend on it. */}
-              <span className="lg:pl-[var(--depth)]" style={{ ["--depth" as string]: `${entry.depth * 12}px` }}>
+              <span
+                className="lg:pl-[var(--depth)]"
+                style={{ ["--depth" as string]: `${entry.depth * 12}px` }}
+              >
                 {entry.label}
+              </span>
+              {/* The leader, and it only exists where there is a width for it to
+                  cross. A dotted rule between a name and its number is what a
+                  printed contents page does with the space between them. */}
+              <span
+                className="hidden min-w-0 flex-1 translate-y-[-3px] border-b border-dotted lg:block"
+                style={{ borderColor: active ? accent(0.5) : RULE }}
+              />
+              <span
+                className="shrink-0 font-mono text-[11px] tabular-nums"
+                style={{ color: active ? accent(0.8) : TEXT_FAINT }}
+              >
+                {String(i + 1).padStart(2, "0")}
               </span>
             </button>
           );

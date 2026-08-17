@@ -10,6 +10,9 @@ import {
   BACKGROUND,
   FOG_FAR_SCALE,
   FOG_NEAR_SCALE,
+  GROUND_LIGHT,
+  RIM_LIGHT,
+  SKY_LIGHT,
 } from "@/lib/transformer/theme";
 import { DEFAULT_POSE } from "@/lib/transformer/camera";
 import { attachControls, pointer } from "@/lib/transformer/input";
@@ -50,7 +53,7 @@ function RimLight() {
     );
   });
 
-  return <directionalLight ref={ref} intensity={1.35} color="#ffd9c2" />;
+  return <directionalLight ref={ref} intensity={1.35} color={RIM_LIGHT} />;
 }
 
 /**
@@ -222,7 +225,7 @@ export default function Scene({ lowPower, onContextLost }: Props) {
           needs against a background it is only a little brighter than.
         */}
         <ambientLight intensity={0.18} />
-        <hemisphereLight args={["#6a5347", "#0d0806", 0.5]} />
+        <hemisphereLight args={[SKY_LIGHT, GROUND_LIGHT, 0.5]} />
         <directionalLight position={[7, 12, 9]} intensity={2.1} />
         {/* Fill from the opposite side, weak. Enough that a face turned away
             from the key is dark rather than absent. */}

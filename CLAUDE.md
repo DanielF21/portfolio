@@ -320,6 +320,55 @@ three places bridge the two, and all three are commented: the registry entry in
 `things.ts`, the `llm` key in `loaders.tsx` (keyed by slug, loading a module
 named for the block), and the capture URL.
 
+### It is a plate, not a console, and that was hard won
+
+This piece was built in answer to gpu.kylejeong.com, and for a while it was a
+copy of it. Not the palette, which had already been changed: the CHROME, element
+for element and in places word for word.
+
+| gpu.kylejeong.com | what we had |
+|---|---|
+| hairline frame inset from the viewport edge | same |
+| header bar: bold subject name, then meta | same |
+| `COMPONENT INDEX` / `07 PARTS` | `INDEX` / `14 PARTS` |
+| two digit ordinals in a gutter, mono rows | same |
+| `/device-hardware/h100-sxm` breadcrumb in the canvas corner | `/model/block-15/attn/rope`, same corner |
+| `● MODEL READY` bottom left | `● THE STACK`, and the status dot |
+| `DRAG TO ROTATE / SCROLL TO ZOOM / HOVER TO INSPECT` | verbatim |
+| `RESET VIEW`, top right | `RESET VIEW`, top right |
+| ground grid receding into fog | same |
+
+Recolouring that changes nothing, which is worth knowing before anyone proposes
+it again. What changed instead is the register, and the one it moved to was
+already in the geometry: break marks on elided axes, outlines on anything drawn
+larger than scale, "area is parameter count", measured framing. **It is an
+engineering plate.** Everything below follows from that:
+
+- **No header bar, no status bar, no breadcrumb.** A drawing does not have them.
+  What they said is in the **title block** (`overlay/title-block.tsx`) at the
+  foot of the detail column, which is the corner of the sheet: subject, scale,
+  and which figure you are looking at. Every value is derived from `config.ts`,
+  `layout.ts` and the index. It holds what a drawing cannot state about itself,
+  and nothing the detail column above it already says.
+- **Contents, not an index.** Names in the text face indented by depth, figure
+  numbers in mono, a dotted leader between them, and the current figure marked by
+  setting its name in the signal colour rather than by an accent bar beside it.
+- **Dimension lines, not viewfinder corners** (`focus-mark.tsx`). Extension lines
+  out from the two ends of the subject's two largest axes, a dimension line
+  between them, a tick at each end. Drawn in INK, not the signal: under the new
+  palette a saturated line beside a tensor reads as more geometry.
+- **A datum, not a workbench.** `ground.tsx` draws rules at the section pitch
+  and a centreline along the axis the model runs on. The fine grid is gone.
+- **Leader labels, not chips.** `anchor.tsx` draws a short rule into the thing it
+  names and then unboxed text with a dark halo. A filled chip with a bright
+  border is a tooltip, and a tooltip is a screen convention.
+- **Mono is for numbers.** Wide-tracked uppercase mono is gone from everything
+  except the title block's field labels, which is what small caps are for on a
+  real plate.
+
+If you add chrome to this piece, ask what a drawing would call it. If the answer
+is "a toolbar", it does not go here.
+
 ### Every number is derived
 
 `config.ts` holds the real `config.json` and nothing else. `model.ts` turns it
@@ -797,9 +846,9 @@ cannot drift from what it names. Everything longer lives in the detail column.
 through context and `Anchor` reads it. The rule tightened twice: "am I zoomed in
 at all" put fifteen labels on the whole-block shot, and "or one level down" fixed
 that but broke "Attention", which has five sub-stations carrying twelve labels
-between them. A group view needs no in-world labels: the index lists what is
-inside it, the detail panel describes what the cursor is on, the status bar says
-where you are.
+between them. A group view needs no in-world labels: the contents list what is
+inside it, the detail panel describes what the cursor is on, and the title block
+says which figure you are looking at.
 
 Sprites are excluded from the fit, so **a label placed outside the geometry's
 bounding box is outside the frame**. Labels also get lifted toward the camera by
@@ -901,14 +950,26 @@ of every box at 57% of its lit face. That one ratio was the largest single cause
 of "everything looks blocky": boxes lit that flatly have no readable form, and 28
 identical silhouettes in a row is a grey wall.
 
-**The background is the accent hue at 7% lightness**, not a neutral. That is the
-reference's own recipe, measured off it, and it is why the accent never looks
-pasted on. The first version had a blue-black backdrop (hue 225) under an orange
-accent (hue 19), 154 degrees apart.
+**The field is neutral and only the signal is saturated**, which is the reverse
+of what this file used to say. The old rule was "the background is the accent hue
+at 7% lightness", measured off gpu.kylejeong.com. It works, and it is exactly why
+the two pieces read as the same instrument in different colours: when the field,
+the rules, the labels and the geometry are all one hue, the result is that site's
+signature whatever hue you pick. The resemblance was the thing being removed, so
+the recipe went with it.
 
-Weights sit near the background value and read by **silhouette and rim light**
-rather than by being a competing colour, so the rim light in `scene.tsx` is load
-bearing: remove it and the palette has to move with it.
+Now: the field is a cool ink at almost no chroma (`FIELD_HUE`, and every neutral
+in the piece is derived from it by `hsl()` rather than hand-mixed), the chrome is
+bone white line work at low alpha through `line()`, and the one saturated colour
+in the frame is the signal, spent only on activations and the residual stream.
+`accent()` still exists but is now for the two places the chrome is allowed to
+carry the signal: the current row of the contents, and the legend's own swatch.
+
+Weights sit near the field value and read by **silhouette and rim light** rather
+than by being a competing colour, so the rim light in `scene.tsx` is load
+bearing: remove it and the palette has to move with it. Its colour, and the
+hemisphere's two, live in `theme.ts` (`RIM_LIGHT`, `SKY_LIGHT`, `GROUND_LIGHT`)
+so the rig and the palette cannot drift apart.
 
 **Fog is ranged off the camera's distance**, not in world units. The camera
 stands 5 units from a projection and 114 from the whole stack, so any absolute
@@ -932,11 +993,11 @@ grid is hand-rolled off the same `fwidth` trick `grid-material` already uses.
 
 ### Budget
 
-63 draw calls in the worst view, 11,330 triangles. The overview is 22 and 1,160.
-Every in-block view is around 56 to 59, because they all draw the whole block and
-both halves of the stack; that is the cost of the piece making sense and it is
-cheap. Deleting the rail and the tap mesh paid for the contact lip and the two
-extra segments each elided MLP weight costs.
+61 draw calls in the worst view, 11,306 triangles. The overview is **17 and
+1,090**, down from 22 and 1,160 when it had a fine ground grid and eight-corner
+focus brackets: the plate's furniture is cheaper than the console's was. Every
+in-block view is around 48 to 61, because they all draw the whole block and both
+halves of the stack; that is the cost of the piece making sense and it is cheap.
 
 ### Dev hooks
 

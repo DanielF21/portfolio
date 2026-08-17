@@ -32,6 +32,7 @@ import {
 } from "@/lib/transformer/theme";
 
 import { EncodingKey } from "./key";
+import { TitleBlock } from "./title-block";
 
 /**
  * The one detail surface, down the right hand side.
@@ -70,14 +71,17 @@ function indexOf(id: string): number | null {
   return i < 0 ? null : i;
 }
 
-export function DetailPanel() {
+export function DetailPanel({ onExit }: { onExit: () => void }) {
   const subject = useTransformerStore((s) => s.subject);
 
   // BACK TO THE TOP ON A NEW SUBJECT. The column runs past the fold, so pointing
   // at something else while scrolled down would drop you into the middle of a
   // paragraph about it. Not `behavior: smooth`: the subject changes as fast as
   // the cursor moves.
-  const scroller = useRef<HTMLElement>(null);
+  //
+  // The scroller is the INNER div, not the column: the title block is pinned to
+  // the foot of the column and must not travel with the prose.
+  const scroller = useRef<HTMLDivElement>(null);
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 });
   }, [subject]);
@@ -102,25 +106,28 @@ export function DetailPanel() {
 
   return (
     <aside
-      ref={scroller}
       aria-label="Detail"
       // Below `lg` this is the bottom row rather than the right column, so the
       // rule that separates it from the canvas moves from one edge to the other.
-      className="flex min-h-0 min-w-0 flex-col overflow-y-auto overscroll-contain border-t lg:border-l lg:border-t-0"
+      className="flex min-h-0 min-w-0 flex-col border-t lg:border-l lg:border-t-0"
       style={{ borderColor: RULE, background: SURFACE }}
     >
+      <div
+        ref={scroller}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
       <div
         className="sticky top-0 px-4 py-3"
         style={{ background: SURFACE, borderBottom: `1px solid ${RULE_SOFT}` }}
       >
-        <div
-          className="font-mono text-[10px] uppercase tracking-[0.16em]"
-          style={{ color: accent(0.8) }}
-        >
-          {ordinal !== null ? `${String(ordinal + 1).padStart(2, "0")} / ` : ""}
+        {/* A figure number and what kind of thing this is. Not `01 / MODEL` in
+            wide-tracked micro-caps any more: that was the reference's voice, and
+            a plate numbers its figures in the ordinary way. */}
+        <div className="font-mono text-[10px] leading-4" style={{ color: TEXT_FAINT }}>
+          {ordinal !== null ? `Fig. ${String(ordinal + 1).padStart(2, "0")} · ` : ""}
           {kind}
         </div>
-        <h2 className="mt-1 font-mono text-[14px] leading-5" style={{ color: TEXT }}>
+        <h2 className="mt-1 text-[15px] font-medium leading-5" style={{ color: TEXT }}>
           {label}
         </h2>
         {shape && (
@@ -225,8 +232,13 @@ export function DetailPanel() {
       </div>
 
       {/* The key, on the layouts where the index is a strip and cannot hold it.
-          `mt-auto` inside it pins it to the bottom of the column. */}
+          `mt-auto` inside it pins it to the bottom of the scrolling region. */}
       <EncodingKey className="lg:hidden" />
+      </div>
+
+      {/* The plate's title block, in the corner of the sheet. Outside the
+          scroller on purpose: it is furniture, not content. */}
+      <TitleBlock onExit={onExit} />
     </aside>
   );
 }

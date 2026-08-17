@@ -5,9 +5,9 @@ import {
   CACHE,
   OP_LINE,
   RULE_SOFT,
+  TEXT,
   TEXT_MUTED,
   WEIGHT,
-  accent,
 } from "@/lib/transformer/theme";
 
 /**
@@ -57,14 +57,14 @@ export function EncodingKey({ className = "" }: { className?: string }) {
       className={`mt-auto px-4 py-2.5 ${className}`}
       style={{ borderTop: `1px solid ${RULE_SOFT}` }}
     >
-      <div
-        className="pb-1.5 font-mono text-[10px] uppercase tracking-[0.16em]"
-        style={{ color: accent(0.75) }}
-      >
+      {/* Sentence case in the text face, like every other heading on the
+          plate. Wide-tracked mono capitals are the register this piece is
+          getting out of; see `index-panel.tsx`. */}
+      <div className="pb-1.5 text-[12px] font-medium leading-4" style={{ color: TEXT }}>
         Key
       </div>
 
-      <ul className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] leading-4">
+      <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] leading-4">
         <Term swatch={{ background: WEIGHT, outline: `1px solid ${OP_LINE}` }}>
           Weights
         </Term>

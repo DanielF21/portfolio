@@ -42,8 +42,15 @@ import { useScopePath } from "./scope";
 
 
 const FONT_PX = 56;
-const PAD_X = 26;
+const PAD_X = 14;
 const PAD_Y = 16;
+
+/** The leader: a short rule running into the thing being named, then a gap, then
+ *  the text. This is what replaced a filled chip with a bright border, which was
+ *  a tooltip, and a tooltip is a screen convention. A drawing annotates with a
+ *  leader and unboxed text. */
+const TICK = 34;
+const TICK_GAP = 12;
 
 /** Fraction of the frame's height one label occupies. Small: these are ticks on
  *  a drawing, not titles. */
@@ -58,9 +65,15 @@ function build(text: string): Built | null {
   const measure = document.createElement("canvas").getContext("2d");
   if (!measure) return null;
 
-  const font = `500 ${FONT_PX}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  // A grotesk rather than the mono this used to be. Mono micro-labels over a
+  // dark field with a bright rule round them is the register this piece is
+  // getting out of; a plate sets its annotations in the same face as its prose.
+  // A system stack rather than the site's webfont: canvas cannot resolve a CSS
+  // variable, and a label that silently falls back mid-session would resize.
+  const font = `500 ${FONT_PX}px ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif`;
   measure.font = font;
-  const w = Math.ceil(measure.measureText(text).width + PAD_X * 2);
+  const textW = measure.measureText(text).width;
+  const w = Math.ceil(TICK + TICK_GAP + textW + PAD_X * 2);
   const h = Math.ceil(FONT_PX + PAD_Y * 2);
 
   const canvas = document.createElement("canvas");
@@ -69,19 +82,26 @@ function build(text: string): Built | null {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
-  // Square cornered, to match the shell. The planet's version is a rounded pill
-  // because it belongs to a soft world; this one belongs to an instrument.
-  ctx.fillStyle = "rgba(26, 15, 10, 0.82)";
-  ctx.fillRect(0, 0, w, h);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = "rgba(244, 87, 13, 0.35)";
-  ctx.strokeRect(1, 1, w - 2, h - 2);
+  const mid = h / 2;
+
+  // The leader. No fill and no border anywhere on this canvas: what sits behind
+  // the text is the scene.
+  ctx.strokeStyle = "rgba(233, 237, 242, 0.55)";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(PAD_X, mid);
+  ctx.lineTo(PAD_X + TICK, mid);
+  ctx.stroke();
 
   ctx.font = font;
-  ctx.textAlign = "center";
+  ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(246, 236, 231, 0.92)";
-  ctx.fillText(text, w / 2, h / 2 + 2);
+  // A dark halo instead of a box. Invisible against the field, and the only
+  // thing keeping a label legible where it crosses a lit face.
+  ctx.shadowColor = "rgba(8, 11, 15, 0.9)";
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = "rgba(233, 237, 242, 0.95)";
+  ctx.fillText(text, PAD_X + TICK + TICK_GAP, mid + 2);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
