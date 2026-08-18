@@ -334,3 +334,22 @@ code[data-line-numbers-max-digits="3"] > [data-line]::before {
 .prose .table-scroll :is(th, td) {
   @apply whitespace-nowrap font-mono text-meta;
 }
+
+/* ------------------------------------------------------------------ figures
+ *
+ * The charts in /writing are matplotlib PNGs with a white canvas baked into
+ * them, because the ink on them is dark and has to stay legible in both
+ * themes. On the dark palette that arrives as a bright slab with a hard edge,
+ * so the border and the radius turn it into a deliberate card rather than a
+ * hole in the page, and the padding continues the canvas far enough that the
+ * frame never sits on an axis label. */
+.prose img {
+  @apply w-full rounded-xl border border-border bg-white p-2;
+}
+
+/* No caption rule here, deliberately. Styling "the paragraph after an image"
+ * as a caption is one `:has(> img) + p` away and it is wrong: half the figures
+ * in /writing are followed by the finding they are evidence for, not by a
+ * caption, and the rule renders those in small muted type. There is no
+ * <figcaption> to write either, since the pipeline allows no raw HTML, so a
+ * caption is just a paragraph and reads as one. */

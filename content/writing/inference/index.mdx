@@ -1,163 +1,86 @@
 ---
 title: "Building an inference engine"
 publishedAt: "2026-08-08"
-summary: "The model, the hardware, the memory arithmetic and the constraints every engine in the series is measured against."
+summary: "The model, the machine, the four numbers every part is measured against, and the running score on what I predicted."
 ---
 
-## Model
+Each engine adds one idea to the one before it, runs on the same GPU against
+the same model, and gets a writeup with its numbers in it. There is no planned
+end: the next engine is whatever the last one's bottleneck says it should be,
+so I do not know yet what the final part is.
 
-**Qwen2.5-1.5B** (fp16), fixed across every engine. The engine is the only
+Everything below is what the parts are measured against. It is worth reading
+once and never again.
+
+## The model and the machine
+
+**Qwen2.5-1.5B** in fp16, fixed across every part. The engine is the only
 independent variable.
 
-| | |
-|---|---|
-| Parameters | 1.54 B |
-| Layers | 28 |
-| Hidden size | 1536 |
-| Attention heads | 12 |
-| KV heads (GQA) | 2 |
-| Head dim | 128 |
-| Vocab | 151,936 |
+| | | | |
+|---|---|---|---|
+| Parameters | 1.54 B | Attention heads | 12 |
+| Layers | 28 | Key value heads | 2 |
+| Hidden size | 1536 | Head dim | 128 |
+| Vocab | 151,936 | | |
 
-## Memory arithmetic
-
-Formulas from [Transformer Inference Arithmetic](https://kipp.ly/p/transformer-inference-arithmetic)
-(kipply, 2022).
-
-**Weights** — parameters × 2 bytes at 16-bit precision:
-
-```
-1.54e9 × 2 = 3.09 GB   (2.88 GiB, matching model.safetensors on disk)
-```
-
-**KV cache per token** — `2 · 2 · n_layers · n_heads · d_head`, where the
-first 2 is the K and V pair and the second is bytes per fp16 value. Qwen2.5
-uses grouped-query attention, so the head term is `n_kv_heads = 2`, not the
-12 attention heads:
-
-```
-2 × 2 × 28 × 2 × 128 = 28,672 bytes = 28 KiB / token
-```
-
-| | |
-|---|---|
-| Per token | 28 KiB |
-| Per 1K tokens | 28 MiB |
-| Per 2048-token sequence | 56 MiB |
-
-GQA is doing heavy lifting here: with full multi-head attention the same
-model would cost `2 × 2 × 28 × 12 × 128` = 168 KiB/token, **6× more**. Cheap
-KV means memory capacity is not the first thing that binds which shapes
-which optimizations are worth building and in what order.
-
-## Hardware
-
-**NVIDIA A10 on Modal.** Local machines are for the dev loop only; every
-recorded number comes from the A10 so results are comparable across engines.
-
-[Options Considered](/writing/inference/modal-chip-analysis)
+**NVIDIA A10, rented from Modal.** Local machines are for the dev loop only.
+Every recorded number in every part comes from the A10, so the parts are
+comparable to each other.
 
 | | |
 |---|---|
 | Memory | 24 GB GDDR6 |
 | Bandwidth | 600 GB/s |
 | fp16 dense | 125 TFLOPS |
-| Ridge point | 125e12 ÷ 600e9 = **208 FLOP/byte** |
 
-Chosen over the L4, which has near-identical fp16 compute (121 TFLOPS) and
-the same 24 GB but **half the memory bandwidth** (300 GB/s). Decode is
-bandwidth-bound, so the A10 is roughly 2× faster at the thing being
-optimized, and cheaper per token despite the higher hourly rate. The L4's
-one advantage is fp8 support, which Ampere lacks.
+I picked it over the L4, which has nearly the same fp16 compute (121 TFLOPS)
+and the same 24 GB but **half the memory bandwidth**. Decode reads the whole
+model for every token it produces, so bandwidth is the thing being optimized,
+and the A10 is roughly 2x faster at it.
+[Every option I considered](/writing/inference/modal-chip-analysis).
 
-## Memory budget
+## The four numbers this series runs on
 
-Measured on the A10, not estimated:
+| | | why it matters |
+|---|---|---|
+| KV cache | 28 KiB per token | grouped query attention makes it 6x cheaper than plain multi head attention would be |
+| Ridge point | 208 FLOP per byte | below this the A10 is starved of data, not of compute |
+| Batch 1 ceiling | 194 tok/s | reading 3.09 GB of weights at 600 GB/s takes 5.1 ms, and one token needs all of them |
+| Free for the cache | ~19 GiB | measured on the card after loading the model, not read off a spec sheet |
 
-| | |
-|---|---|
-| Card total (nominal) | 24 GB |
-| Visible to CUDA | 22.06 GiB |
-| Model weights (fp16) | 2.88 GiB |
-| Allocator reserved after load | 3.06 GiB |
-| **Free for KV cache** | **~19 GiB** |
+[Where each of these comes from](/writing/inference/arithmetic). They are worth
+carrying into the parts, because between them they say what any engine here can
+and cannot do before a line of it is written.
 
-The 2.88 GiB weights figure matches the arithmetic above exactly
-(1.54e9 × 2 bytes). Roughly 0.3 GiB of the card is not visible to CUDA at
-all, and the allocator reserves ~0.2 GiB beyond the weights themselves.
+## What I predicted, and how it is going
 
-19 GiB at 28 KiB/token is ~710,000 tokens — around 340 concurrent 2K
-sequences. Memory would never bind, so the memory-management work would have
-nothing to show.
+Each part ends with a numbered prediction about the next one, written before the
+next one exists. Keeping score is the point, and so far the score is mixed.
 
-**Pool size is therefore an axis, swept alongside batch size from the batching
-engine onward.** Every engine is reported at two settings: unconstrained, which
-measures where bandwidth binds, and capped at 2 GiB, which admits ~74,900
-tokens and is the fixed pool every memory result is graded against.
+| prediction | status | where |
+|---|---|---|
+| Decode is bandwidth bound at low batch, ceiling 194 tok/s | **falsified.** Measured 45.80 tok/s, 4.2x below that ceiling. Bandwidth is not what binds; the host is | [Part 2](/writing/inference/cached) |
+| Prefill is compute bound and decode is bandwidth bound, so they need separate reporting | **confirmed as a shape.** The two sit on opposite sides of the roofline: at 4096 tokens the first engine reaches 36.3% of peak compute and 1.9% of peak bandwidth, the second 1.8% and 24.5% | [Part 2](/writing/inference/cached) |
+| A cache should buy nothing at short prompts and a lot at long ones | **confirmed.** 0.96x at 16 tokens, 12.73x at 4096 | [Part 2](/writing/inference/cached) |
+| Cached decode should land at ~52 tok/s, flat | **missed low, five times out of five.** Measured 44 to 46 tok/s, 12 to 15% under, for a reason Part 2 explains | [Part 2](/writing/inference/cached) |
+| Batch 208 is where decode stops being bandwidth bound | untested | needs a batch sweep |
+| Cache traffic overtakes weight traffic at batch 32 and 4096 tokens | untested | needs a batch sweep |
 
-| Sequence length | Concurrent sequences at 2 GiB |
-|---|---|
-| 512 | 146 |
-| 2048 | 36 |
-| 4352 (4096 prompt + 256 gen) | 17 |
+## The workload
 
-vLLM exposes the same knob as `gpu_memory_utilization`. Sizing the pool
-deliberately and reporting behaviour at the ceiling is more informative than
-running with 19 GB free and never reaching one.
+Every part runs the same five prompts, sliced to exact token counts from one
+source text: **16, 64, 256, 1024 and 4096 tokens**. They are exact rather than
+approximate, so prompt length is a clean 4x geometric axis and a curve drawn
+against it means something. Prompts are named after their length, so `p4096` is
+the 4096 token one.
 
-## Expected constraints
+Each run generates **256 new tokens**, greedy, from a fixed seed, so the output
+is deterministic and any two engines can be checked for producing identical
+text. Every number reported in a part is the mean or median of **five recorded
+runs after two warmup runs**, at batch size 1.
 
-Consequences that follow from the numbers above, to be confirmed or falsified
-by measurement rather than assumed:
-
-- **Decode is bandwidth-bound at low batch.** One token requires reading all
-  3.09 GB of weights: `3.09 / 600` ≈ 5.1 ms, a ceiling of ~194 tok/s at
-  batch 1 regardless of kernel quality.
-- **Batch ~208 is where decode stops being memory-bound.** Decode arithmetic
-  intensity is roughly the batch size, so it takes ~208 concurrent sequences
-  to reach the ridge. The 2 GiB pool admits far fewer than that at long
-  context, so the capped setup stays memory-bound by construction.
-- **KV traffic overtakes weight traffic at scale.** At batch 32 with 4K
-  context, KV reads are `32 × 4096 × 28 KiB` ≈ 3.76 GB per step, exceeding
-  the 3.09 GB of weights — the bottleneck shifts from weights to cache.
-- **Prefill is compute bound, decode bandwidth bound.** The two phases sit on opposite
-  sides of the roofline, so they are reported separately (TTFT vs
-  inter-token latency)
-
-## Measurement integrity
-
-`DecodeTrace.mark()` calls `sync()` after every token, which blocks until the
-GPU drains. That is how inter-token latency is measured, and it could in
-principle inflate every result by preventing the CPU from running ahead.
-
-Measured with `scripts/measure_overhead.py`: **it costs 0.23 ms per forward
-pass, about 1.2%.** Syncing is nearly free here because there is nothing to
-pipeline — at short sequences the CPU is the bottleneck and the GPU is
-already idle, and at long sequences 249 ms of GPU work makes a barrier
-invisible. The instrumentation is not distorting the numbers.
-
-## Open threads
-
-**Explore CUDA graphs to remove per-launch overhead.** A forward pass issues
-**1,123 kernel launches at ~16.5 µs each — 18.5 ms of pure CPU cost**, against
-a 5.1 ms bandwidth floor for a single decode step. At short sequences that
-makes the engine ~96% host-bound: the GPU sits idle waiting to be fed
-(`scripts/measure_overhead.py`).
-
-CUDA graphs capture the launch sequence once and replay it as a single
-submission, so the per-launch API cost mostly disappears. It is an NVIDIA API
-rather than a research idea, and it is standard in vLLM and TensorRT-LLM.
-`torch.compile(mode="reduce-overhead")` is the cheap way in, and adds kernel
-fusion on top.
-
-It cannot be applied yet. Graphs require **static shapes**, and this engine's
-input grows every step (`[1,16] → [1,17] → … → [1,271]`), which would need one
-captured graph per shape. A KV cache makes every decode step `[1,1]`, so the
-cache is a prerequisite rather than an alternative. That is also why real
-engines pad batch sizes into fixed buckets.
-
-Worth revisiting once the cache lands and per-step cost is flat across prompt
-lengths — at that point overhead is the bottleneck everywhere, not just at
-short prompts, and the change has a measured justification.
-
-Read: https://developer.nvidia.com/blog/cuda-graphs/
+Two numbers get reported separately in every part, because they measure
+different phases. **Time to first token** is prefill: the cost of processing the
+prompt. **Inter token latency** is decode: the cost of each token after that.
+Averaging them together would hide both.

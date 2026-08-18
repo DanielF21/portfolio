@@ -1,198 +1,309 @@
 ---
-title: "naive: autoregressive decode with no KV cache"
+title: "No cache at all"
 publishedAt: "2026-08-08"
 series: "inference"
 part: 1
-summary: "The baseline. Every step runs a full forward pass over the whole sequence, recomputing every key and value from scratch."
-result: "45.7 tok/s at p16, falling 12.7x to 3.6 at p4096"
+summary: "The baseline. Every step reprocesses the whole sequence, and 99.6% of the arithmetic at a 4096 token prompt is recomputing values that cannot change."
+result: "45.66 tok/s at p16, falling 12.7x to 3.60 at p4096"
 code: "https://github.com/DanielF21/inference/tree/main/infer/engines/naive"
 ---
 
-The baseline. Every step runs a full forward pass over the entire sequence so
-far, recomputing all keys and values from scratch. `use_cache=False` and
-`logits_to_keep=1` are both explicit, so the next engine changes exactly one
-variable.
+**This engine generates 45.66 tokens per second on a 16 token prompt and 3.60
+on a 4096 token prompt, a 12.7x fall driven entirely by the length of the
+prompt and not by anything it generates.** It keeps nothing between steps, so
+every step reprocesses the whole sequence built so far. At the longest prompt
+that works out to 1,081,216 token forwards to emit 256 tokens, where an engine
+with a cache would need 4,352. The part I did not expect: it becomes *more*
+efficient in hardware terms as it gets slower, climbing from 13.8% of the A10's
+peak fp16 throughput at the shortest prompt to 36.3% at the longest.
 
-**Setup:** Qwen2.5-1.5B fp16, NVIDIA A10 (Modal), greedy, seed 0, 256 new
-tokens, 5 recorded runs + 2 warmup per prompt.
+This is the first part, so there is no earlier prediction to check it against.
+Everything from here on has one.
+
+## What this engine is
+
+A decode loop and nothing else. The prompt goes into the model, the model
+returns a score for every word in its vocabulary, the highest scoring one is
+appended to the sequence, and the whole sequence goes back in. That repeats 256
+times. Nothing is carried from one step to the next, so step 200 recomputes
+everything steps 1 through 199 already computed.
+
+Two things are set explicitly rather than left to the framework's defaults, so
+that the next engine can change exactly one variable: no state is kept between
+steps, and the vocabulary projection at the end of the model runs on the last
+position only rather than on every position in the sequence. The second one
+matters more than it sounds like it should. Projecting all 4096 positions into
+a 151,936 word vocabulary would cost 1.9 TFLOP per pass instead of 0.0005.
+
+**Setup:** Qwen2.5-1.5B in fp16, one NVIDIA A10, greedy decoding from seed 0,
+256 new tokens per run, five recorded runs after two warmup runs, batch size 1.
 
 ## Results
 
-| prompt | ptok | ttft | total | decode tok/s | itl p95 | per-step | peak mem |
+| prompt | prompt tokens | TTFT | total | decode | per token | ITL p95 | peak memory |
 |---|---|---|---|---|---|---|---|
-| p16 | 16 | 0.022s | 5.606s | 45.66 | 23.7 ms | 21.9 ms | 2.90 GiB |
-| p64 | 64 | 0.021s | 5.661s | 45.22 | 25.3 ms | 22.1 ms | 2.91 GiB |
-| p256 | 256 | 0.022s | 7.291s | 35.08 | 32.7 ms | 28.5 ms | 2.92 GiB |
-| p1024 | 1024 | 0.062s | 18.694s | 13.69 | 81.4 ms | 73.0 ms | 2.96 GiB |
-| p4096 | 4096 | 0.255s | 71.146s | 3.60 | 284.5 ms | 277.9 ms | 3.16 GiB |
+| p16 | 16 | 22.1 ms | 5.606 s | 45.66 tok/s | 21.9 ms | 23.7 ms | 2.90 GiB |
+| p64 | 64 | 21.3 ms | 5.661 s | 45.22 tok/s | 22.1 ms | 25.3 ms | 2.91 GiB |
+| p256 | 256 | 22.2 ms | 7.291 s | 35.08 tok/s | 28.5 ms | 32.7 ms | 2.92 GiB |
+| p1024 | 1024 | 61.6 ms | 18.694 s | 13.69 tok/s | 73.1 ms | 81.4 ms | 2.96 GiB |
+| p4096 | 4096 | 255.5 ms | 71.146 s | 3.60 tok/s | 278.0 ms | 284.5 ms | 3.16 GiB |
 
-`total` is the mean wall clock per run. `per-step`
-is `total / 256`.
+`total` is mean wall clock per run. Time to first token and the two latency
+percentiles are medians across the five runs, which is what the figures plot.
+Decode throughput is the 255 tokens after the first divided by the time to
+produce them, so prefill is excluded from it, and `per token` is the same
+quantity inverted. Peak memory is against 2.88 GiB of weights and 22.06 GiB
+visible on the card, so nothing here is close to full.
 
-Throughput falls **12.7×** from the shortest prompt to the longest.
+![Inter token latency against prompt length](/figures/inference/naive-itl.png)
 
-Run to run variance seems negligible the five p4096 runs span 71.126–71.185 s,
-a spread of 0.08%. Output hashes are identical across all runs of a given
-prompt. This mostly confirms the fact that greedy decoding is determinsitic w/ fixed seed.
+Median and 95th percentile inter token latency, five runs per prompt. The two
+dashed lines are the controls this part measures against: the upper one is what
+a forward pass costs before the GPU does anything useful, and the lower one is
+the memory traffic a step actually needs. The three shortest prompts sit on the
+upper line.
 
-## Why p16 and p64 are indistinguishable
+Run to run variance is small at the long prompts and not at the short ones. The
+five runs at p4096 span 71.126 to 71.185 s, a spread of 0.08%; the five at p16
+span 3.5%, because the same few milliseconds of jitter is a larger fraction of
+a 5.6 second run. All five runs of a given prompt produce byte identical
+output, which confirms only that greedy decoding from a fixed seed is
+deterministic.
 
-45.66 vs 45.22 tok/s is a 1% difference across a 4× change in prompt length.
-This can be explain by the shape of the work function.
+## The floor underneath everything
 
-Step `i` processes `P + i` tokens, so a full generation costs
+The flat left half of that chart is the first thing to explain, and it is not
+about this engine at all.
+
+To find the fixed cost of a forward pass I ran one over a single token, which
+is the smallest amount of GPU work the model can be asked to do, so whatever it
+costs is close to pure overhead.
+
+| sequence length | pipelined | serialized | CPU only | GPU instructions | µs each |
+|---|---|---|---|---|---|
+| 1 | 19.32 ms | 19.55 ms | 18.54 ms | 1,123 | 16.5 |
+
+**A forward pass costs 19.32 ms before the GPU does anything useful, and
+18.54 ms of that is the CPU.** The GPU contributes under a millisecond at
+sequence length 1. The model is not one instruction to the GPU, it is 1,123 of
+them, and issuing each one costs the host about 16.5 µs whether or not there is
+any work in it.
+
+That number is the control every other number in this part is read against, and
+it is the reason the series goes the way it does. Against a 19.32 ms floor, the
+three shortest prompts have almost no room to be slow in.
+
+## Why the left half of the curve is flat
+
+45.66 against 45.22 tok/s is a 1% difference across a 4x change in prompt
+length. There are two available explanations and they are not the same claim.
+
+The first is the shape of the work. Step `i` processes `P + i` tokens, so
+generating 256 tokens costs
 
 ```
 Σ(P + i) for i in 0..255  =  256·P + 32,640
 ```
 
-The constant 32,640 comes from the generated tokens alone. 
+That constant is the generated tokens paying for themselves, and it comes from
+`Σ(0, 1, …, 255) = 255 · 256 / 2 = 32,640`. It dominates until the prompt
+reaches about 128 tokens, so below that the arithmetic barely changes with the
+prompt.
 
-Σ(0, 1, ..., 255) = (N - 1) * N / 2 = 255 * 256 / 2 = 32,640 and dominates until
-`256·P` becomes comparable to it which is around P = 128. Below that, the prompt is
-nearly irrelevant and the cost is essentially fixed. Above it, the curve
-bends sharply. The same reasoning explains why `ttft` is flat at 16, 64 and
-256 tokens: prefill at those lengths is fixed overhead bound, not
-compute bound.
+The second is the floor. The time barely changes because the host cannot issue
+work any faster, whatever the arithmetic is doing.
+
+**It is the floor that binds.** At p16 this engine runs at 21.9 ms per step
+against a 19.32 ms floor, 13% above it. The work function would predict flatness
+on an infinitely fast host too, but that is not the machine this ran on, and
+watching the two accounts separate as the prompt grows shows which one is
+active:
+
+| step | work grows | time grows |
+|---|---|---|
+| p16 → p64 | 1.33x | 1.01x |
+| p64 → p256 | 2.00x | 1.29x |
+| p256 → p1024 | 3.00x | 2.56x |
+| p1024 → p4096 | 3.67x | 3.80x |
+
+Work here is `Σ(P + i)`, the token forwards the engine performs. Time rises far
+more slowly than work at the short end, because the floor is absorbing it: 2x
+the arithmetic for 1.29x the time from p64 to p256. By p1024 the floor is
+nearly exhausted, and in the last row time finally rises *faster* than token
+forwards, because token forwards are linear and attention is not.
+
+The same reasoning explains why time to first token is flat at 16, 64 and 256
+tokens. Prefill at those lengths is not measuring prefill, it is measuring the
+cost of asking.
+
+![Time to first token against prompt length](/figures/inference/naive-ttft.png)
+
+Prefill cost against prompt length. Flat across a 16x change in arithmetic,
+then linear once the work is large enough to outgrow the floor.
 
 ## Where the time actually goes
 
-The interesting result is that the engine becomes **more** hardware-efficient
-as it becomes slower.
-
-FLOPs are counted as: body `2 × 1.31e9 × Σn` (non-embedding parameters), LM
-head `2 × 0.233e9 × 256` (once per step, because `logits_to_keep=1`), and
-attention `86,016 × Σn²` for `QK^T` and `attn @ V` across all 28 layers. The
-attention coefficient is half the full `4 · d · L`: the backend is pinned to
-`sdpa` and receives `attn_mask=None, is_causal=True`, which dispatches to a
-kernel that skips causally masked entries rather than computing and
-discarding them.
+Once past the floor, the engine gets **more** hardware efficient as it gets
+slower.
 
 | prompt | total FLOPs | attention share | total time | achieved | MFU |
 |---|---|---|---|---|---|
-| p16 | 97.0 TF | 0.6% | 5.606s | 17.3 TFLOPS | 13.8% |
-| p64 | 129.5 TF | 0.7% | 5.661s | 22.9 TFLOPS | 18.3% |
-| p256 | 260.8 TF | 1.3% | 7.291s | 35.8 TFLOPS | 28.6% |
-| p1024 | 802.0 TF | 3.7% | 18.694s | 42.9 TFLOPS | 34.3% |
-| p4096 | 3226.5 TF | 12.2% | 71.146s | 45.4 TFLOPS | 36.3% |
+| p16 | 97.0 TF | 0.6% | 5.606 s | 17.3 TFLOPS | 13.8% |
+| p64 | 129.5 TF | 0.7% | 5.661 s | 22.9 TFLOPS | 18.3% |
+| p256 | 260.8 TF | 1.3% | 7.291 s | 35.8 TFLOPS | 28.6% |
+| p1024 | 802.0 TF | 3.7% | 18.694 s | 42.9 TFLOPS | 34.3% |
+| p4096 | 3226.5 TF | 12.2% | 71.146 s | 45.4 TFLOPS | 36.3% |
 
-`achieved = total FLOPs / total time`, and `MFU = achieved / 125 TFLOPS`.
-Time is the only measured quantity in this table; the FLOP counts are derived
-from the architecture (see the full calculation: [MFU Calculation](/writing/inference/mfu-calculation)).
+MFU, model FLOPs utilization, is the arithmetic the model actually requires
+divided by what the chip can do in the same time. Here `achieved` is total
+FLOPs over total time and `MFU` is that against the A10's 125 TFLOPS peak.
+**Time is the only measured quantity in this table.** The FLOP counts are
+derived from the architecture: the body of the model costs 2 FLOPs per
+parameter per token, the vocabulary projection is charged once per step, and
+attention costs `86,016 · n²` across all 28 layers. That coefficient is half
+the textbook one because the attention kernel skips the causally masked half of
+the score matrix instead of computing it and throwing it away. [Full
+derivation](/writing/inference/mfu-calculation).
 
-MFU rises monotonically from 13.8% to 36.3% against the A10's 125 TFLOPS
-fp16 peak. At short prompts each forward pass is only 16 to (16 + 256) tokens wide so
-the matmuls are small. At p4096 the matmuls are way larger.
+MFU rises from 13.8% to 36.3%, and the crossover is computable in advance. A
+pass over `n` tokens has an arithmetic intensity of about `n`: the weights get
+read once no matter how many tokens ride along with them, so intensity is just
+tokens per weight read. Against the A10's ridge point of 208 FLOP per byte, any
+pass narrower than 208 tokens is starved of data rather than of compute. The
+sequence grows during a run, so each prompt crosses that line partway through:
 
-The crossover is computable. A pass over `n` tokens has arithmetic intensity
-`n` — the weights are read once regardless of how many tokens ride along, so
-intensity is just tokens per weight-read. Against the A10's ridge point of
-208 FLOP/byte (see [Hardware](/writing/inference#hardware)), any pass narrower than 208 tokens is bandwidth-bound. The
-sequence grows during a run, so each prompt crosses that line partway
-through:
-
-| prompt | `n` over the run | steps below ridge |
+| prompt | `n` over the run | steps below the ridge |
 |---|---|---|
 | p16 | 16 → 271 | 75% |
 | p64 | 64 → 319 | 56% |
 | p256 | 256 → 511 | 0% |
 
-**p256 is the first prompt that is fully compute bound**, which is where
-the MFU curve bends hardest (18.3% → 28.6%).
+**p256 is the first prompt that is compute bound for its entire run**, and it is
+where the MFU curve bends hardest, 18.3% to 28.6%.
 
-Attention's share of total FLOPs grows from 0.6% to 12.2% as context grows,
-which is the quadratic term becoming visible. It is still not dominant at 4K
-for a model this small. The MLP is still the bulk of the work but the trend is
-the reason attention kernels matter at longer contexts.
+Attention's share of the arithmetic grows from 0.6% to 12.2% as context grows,
+which is the quadratic term becoming visible. It is still not dominant at 4096
+tokens for a model this small. The feed forward layers are still the bulk of
+the work, but that trend is the reason attention kernels matter at long
+context.
 
-## The size of the redundancy
+36.3% of an A10 is a respectable number. The next section is about what that
+36.3% was busy doing.
 
-At p4096 the engine performs **1,081,216 token forwards** to emit 256 tokens.
-An engine that caches keys and values would need `4096 + 256 = 4,352`: one
-prefill pass plus a single token pass per step.
+## What that efficiency was actually doing
 
-That is a **248× difference in token-forwards, i.e. 99.6% of the work is
-recomputation** of values that cannot change, because causal masking means no
-earlier position ever attends forward and its keys and values are therefore
-invariant.
+At p4096 this engine performs **1,081,216 token forwards to emit 256 tokens**.
+An engine that kept keys and values around would need `4096 + 256 = 4,352`: one
+pass over the prompt, then one token per step.
 
-## Memory
+That is a **248x difference, so 99.6% of the work is recomputation**. It is
+recomputation rather than merely repeated work because of causal masking. No
+position ever attends forward to a later one, so once a token's key and value
+vectors are computed they can never change. The engine throws them away and
+derives them again, 255 more times.
 
-Peak allocated memory barely moves: 2.90 GiB at p16 to 3.16 GiB at p4096,
-against 2.88 GiB of weights. Everything above the weights is transient
-activation memory, and nothing persists between steps which is precisely
-the trade being made. The naive engine spends compute to avoid holding state.
+**So the best MFU score in this part belongs to its worst behaviour.** The
+engine hits 36.3% of peak precisely where 99.6% of the arithmetic it is
+performing does not need to happen, and it scores 13.8% where it is doing the
+least wasted work of any configuration here. A utilization metric rewards
+keeping the machine busy, and this engine keeps it busy the way a treadmill
+does. The number is not wrong, it is answering a question I should not have
+been asking on its own.
 
-Memory is measured with `torch.cuda.max_memory_allocated()`, a true peak
-rather than a sampled proxy.
+## Caveats
+
+One GPU, one model, one seed, batch size 1 throughout. Nothing here says
+anything about how this engine behaves under concurrency, which is the setting
+that actually matters for serving, and the whole redundancy argument gets more
+complicated once several sequences share a batch.
+
+There is no vLLM control. Every number in this part is compared against a
+ceiling derived from the hardware rather than against a production engine on
+the same card, so "36.3% of peak" is honest and "as fast as a real engine
+would be" is not something I can claim yet. That comparison needs the engine
+to reach a point where it would not be embarrassing, and it is not there.
+
+The FLOP counts are derived, not measured. If the attention kernel does not
+behave the way the derivation assumes, every MFU number moves together, though
+the shape of the curve would not.
+
+Measuring latency per token means waiting for the GPU to drain after every
+token, which could in principle inflate every result by stopping the CPU from
+running ahead. It costs 0.23 ms per pass, about 1.2%, and the reason it is
+nearly free is structural: serialized and pipelined timings agree because there
+is nothing to pipeline. The CPU is the bottleneck, so the GPU is already idle
+and a barrier costs nothing. At 4096 tokens the two agree again for the
+opposite reason, because 249 ms of GPU work makes a barrier invisible.
 
 ## Bottleneck, and what follows
 
-The binding constraint is redundant computation, not bandwidth, not capacity,
-not kernel quality. Nothing about memory is under pressure. 19 GiB of the
-card sits unused.
+Capacity is not the constraint and never comes close to being one. Peak
+allocated memory moves from 2.90 GiB at p16 to 3.16 GiB at p4096 against
+2.88 GiB of weights, so everything above the weights is transient and nothing
+persists between steps. That is precisely the trade this engine makes: it
+spends compute to avoid holding state, and 19 GiB of the card sits unused while
+it does.
 
-Removing the recomputation is the next change, and it makes two falsifiable
-predictions:
+The binding constraint is redundant computation. Not bandwidth, not capacity,
+not kernel quality. The arithmetic being performed is arithmetic that does not
+need to happen at all.
 
-1. **Cached decode should be roughly flat across prompt length.** Each step
-   reads the same 2.88 GiB of weights regardless of context, with only a
-   small additional term for reading the cache. Where naive falls 12.7×
-   across the prompt range, cached should barely move.
-2. **The speedup is a curve, not a number**: small at p16, large at p4096.
-   Reporting a single "Nx faster" figure for this change would be
-   meaningless without stating the sequence length it was measured at.
+Removing it is the next change. Behind it sits a second constraint that this
+part already measured: **1,123 GPU instructions at 16.5 µs each is 18.5 ms of
+pure host cost, against a 5.1 ms floor for the memory traffic a cached decode
+step would actually need.** At short prompts that makes this engine about 96%
+host bound.
 
-The bandwidth ceiling for a cached step is `2.88 GiB ÷ 600 GB/s` ≈ 5.1 ms,
-or roughly 194 tok/s, against the 277.9 ms per step measured here at p4096.
-Landing well short of that ceiling while staying flat would indicate host and
-kernel launch overhead rather than bandwidth, since a 1.5B model gives each
-step only a few milliseconds of GPU work to hide that overhead behind.
-
-## The overhead floor, measured
-
-The TTFT curve suggests a fixed per pass cost. Prefill is flat across p16,
-p64 and p256 despite 16× more arithmetic. To verify this, I ran `scripts/measure_overhead.py`
-which runs a forward pass over a single token. To allow for the smallest possible amount of GPU work
-so whatever it costs is the fixed cost
-
-| seq_len | pipelined | serialized | cpu only | launches | µs/launch |
-|---|---|---|---|---|---|
-| 1 | 19.32 ms | 19.55 ms | 18.54 ms | 1,123 | 16.5 |
-
-The floor was measured to be 19.32 ms, and 18.54 ms of it is CPU, The GPU contributes
-under a millisecond at seq_len 1. That is ~96% host-bound: I measured 1,123 kernel launches at 16.5 µs each.
-
-- The per token sync in `DecodeTrace` costs 0.23 ms, about 1.2%. It is not
-  distorting the results. The reason is structural — `serialized ≈ pipelined`
-  because there is nothing to pipeline. The CPU is the bottleneck, so the GPU
-  is already idle and a barrier costs nothing. At seq_len 4096 the same
-  equality holds for the opposite reason: 249 ms of GPU work makes a sync
-  invisible.
+The standard fix for host cost is to capture the sequence of GPU instructions
+once and replay it as a single submission. It needs static shapes, and this
+engine's input grows every step, from 16 tokens wide to 271. A cache makes every
+decode step exactly one token wide, so the cache is a prerequisite rather than
+an alternative, and that is the reason it comes next.
 
 ## Prediction, recorded before building the cache
 
-A cached step has ~5.1 ms of GPU work against a 19.32 ms host floor. Step time
-is `max(cpu, gpu)`, since the CPU runs in parallel with the GPU, so the cache
-should land at **~19–20 ms/step ≈ 50 tok/s, flat across every prompt
-length** — not the 194 tok/s bandwidth ceiling.
+A cached step has about 5.1 ms of GPU work against a 19.32 ms host floor. Step
+time is the larger of the two, since the CPU runs ahead of the GPU, so the
+cache should land at **19 to 20 ms per step, about 50 tok/s, flat across every
+prompt length**, and not at the 194 tok/s the bandwidth alone would allow.
 
 | prompt | naive | predicted cached | predicted speedup |
 |---|---|---|---|
 | p16 | 45.66 tok/s | ~52 | ~1.1x |
-| p64 | 45.22 tok/s | ~52 | ~1.2× |
-| p256 | 35.08 tok/s | ~52 | ~1.5× |
-| p1024 | 13.69 tok/s | ~52 | ~3.8× |
-| p4096 | 3.60 tok/s | ~52 | ~14× |
+| p64 | 45.22 tok/s | ~52 | ~1.2x |
+| p256 | 35.08 tok/s | ~52 | ~1.5x |
+| p1024 | 13.69 tok/s | ~52 | ~3.8x |
+| p4096 | 3.60 tok/s | ~52 | ~14x |
 
-The KV cache will buy essentially nothing at short prompts. Naive already runs
-at 21.9 ms/step at p16, only 13% above the 19.32 ms floor. It is sitting on
-that floor, not on a compute limit, and deleting redundant compute cannot help
-where compute was never the constraint. The cache pays only once the
-recomputation it removes is large enough to have been the binding cost, which
-happens somewhere between p256 and p1024.
+The cache will buy essentially nothing at short prompts. This engine already
+runs at 21.9 ms per step at p16, only 13% above the floor. It is sitting on that
+floor, not on a compute limit, and deleting redundant compute cannot help where
+compute was never the constraint. The cache pays only once the recomputation it
+removes is large enough to have been the binding cost, which happens somewhere
+between p256 and p1024.
 
-If that holds, the bottleneck moves from redundant computation to per step
-host overhead, and the target after it is already quantified: **1,123 launches
-× 16.5 µs = 18.5 ms of pure launch cost against a 5.1 ms bandwidth floor.
-Removing this overhead is worth more at short prompts than the KV cache is.
+If that holds, the bottleneck moves from redundant computation to per step host
+overhead, and removing that overhead is worth more at short prompts than the
+cache is.
+
+## Corrections
+
+**The 19.32 ms floor is narrower than it is described above.** It was measured
+on the forward pass this engine runs, with no cache attached to it. Part 2
+attaches one, which adds bookkeeping to every layer of every step and moves the
+floor to roughly 22 ms. The measurement is not wrong; its scope is. The
+prediction above is built on it and misses low by 12 to 15% at every prompt
+length as a result, which [Part 2](/writing/inference/cached) scores in full. Left
+in place rather than corrected upward, because a prediction edited after the
+fact is not a prediction.
+
+## Reproducing this
+
+```
+uv run modal run modal_app.py --engine naive
+uv run python scripts/measure_overhead.py
+```
+
+Defaults are the recorded configuration: five runs, two warmup, 256 new tokens,
+seed 0, batch size 1, all five prompts. Engine flags for this baseline are
+`kv_cache=false` and `logits_to_keep=1`.

@@ -1,0 +1,91 @@
+---
+title: "The memory arithmetic"
+publishedAt: "2026-08-08"
+series: "inference"
+summary: "Where 28 KiB per token, 3.09 GB of weights, 19 GiB free and the 2 GiB pool cap come from."
+---
+
+Backing derivations for [the series' ground rules](/writing/inference). Four
+numbers come out of this file: 28 KiB of cache per token, 3.09 GB of weights,
+roughly 19 GiB free on the card, and a 2 GiB pool cap. The formulas are from kipply's
+[Transformer Inference Arithmetic](https://kipp.ly/p/transformer-inference-arithmetic)
+(2022).
+
+## Weights
+
+Parameters times 2 bytes, at 16 bit precision:
+
+```
+1.54e9 x 2 = 3.09 GB   (2.88 GiB)
+```
+
+That matches the weights file on disk to within the size of its header, which
+is a useful check that the parameter count is right rather than rounded off a
+model card.
+
+## KV cache per token
+
+Every token that has already been generated leaves behind one key vector and
+one value vector in each layer, and every later token reads them. The cost per
+token is
+
+```
+2 x 2 x n_layers x n_kv_heads x head_dim
+```
+
+where the first 2 is the key and value pair and the second is bytes per 16 bit
+value. Qwen2.5 uses grouped query attention, so the head term is the 2 key
+value heads, not the 12 attention heads:
+
+```
+2 x 2 x 28 x 2 x 128 = 28,672 bytes = 28 KiB per token
+```
+
+| | |
+|---|---|
+| Per token | 28 KiB |
+| Per 1K tokens | 28 MiB |
+| Per 2048 token sequence | 56 MiB |
+
+**Grouped query attention is doing the heavy lifting here.** Under full multi
+head attention the same model would spend `2 x 2 x 28 x 12 x 128` = 168 KiB per
+token, **6x more**. Cheap keys and values mean capacity is not the first thing
+that binds on this model, which changes which optimizations are worth building
+and in what order.
+
+## What the card actually has
+
+Measured on the A10 rather than read off the spec sheet:
+
+| | |
+|---|---|
+| Card total (nominal) | 24 GB |
+| Visible to CUDA | 22.06 GiB |
+| Model weights (fp16) | 2.88 GiB |
+| Allocator reserved after load | 3.06 GiB |
+| **Free for the cache** | **~19 GiB** |
+
+The 2.88 GiB weights figure matches the arithmetic above exactly. Roughly
+0.3 GiB of the card is not visible to CUDA at all, and the allocator holds
+about 0.2 GiB beyond the weights themselves.
+
+## Why the pool gets capped
+
+19 GiB at 28 KiB per token is about 710,000 token positions, or around 340
+concurrent 2048 token sequences. On a 1.5B model, memory would simply never
+bind, and any memory management work would have nothing to show for itself.
+A larger model would be sharded across several cards and would not have this
+much room to spare, so a cap is the way to get a realistic ratio of cache size
+to model size on one small GPU.
+
+Capping the pool at 2 GiB admits 74,898 token positions:
+
+| Sequence length | Concurrent sequences at 2 GiB |
+|---|---|
+| 512 | 146 |
+| 2048 | 36 |
+| 4352 (4096 prompt + 256 generated) | 17 |
+
+vLLM exposes the same knob, as a fraction of total GPU memory. Sizing the pool
+deliberately and reporting what happens at the ceiling is more informative than
+running with 19 GiB free and never reaching one.

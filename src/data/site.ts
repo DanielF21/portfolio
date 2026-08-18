@@ -11,15 +11,9 @@
  * The one nav list. The header and the footer both map it, so they cannot drift
  * apart the way they had (three hardcoded links in each, in different orders,
  * with different visibility rules).
- *
- * WRITING IS TEMPORARILY HIDDEN, and this is the only place that decides it.
- * The routes, the content and the home page section are all still there and all
- * still build; only the way in is commented out, so restoring it is one line
- * here and one block in `app/page.tsx`. Writing goes back FIRST when it does:
- * it is the work most worth reading.
  */
 export const NAV = [
-  // { href: "/writing", label: "Writing" },
+  { href: "/writing", label: "Writing" },
   { href: "/things", label: "Things" },
   { href: "/work", label: "Work" },
 ] as const;

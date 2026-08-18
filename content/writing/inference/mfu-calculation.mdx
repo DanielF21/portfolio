@@ -1,19 +1,21 @@
 ---
-title: "Deriving MFU from first principles"
+title: "Deriving MFU and MBU from first principles"
 publishedAt: "2026-08-08"
 series: "inference"
-summary: "The full FLOP count behind the MFU table in the naive analysis."
+summary: "The full FLOP and byte counts behind the utilization tables, from the architecture and one measured quantity."
 ---
 
-A complete derivation of the FLOP counts and utilization figures reported for
-each engine. Everything below follows from the model architecture, the
-hardware specification, and one measured quantity: wall-clock time.
+A complete derivation of the FLOP counts, byte counts and utilization figures
+reported in every part. Everything below follows from the model architecture,
+the hardware specification, and one measured quantity: wall clock time.
+
+Appendix to [Part 1](/writing/inference/naive).
 
 ---
 
 ## I. Givens
 
-### G1 — Model architecture (Qwen2.5-1.5B)
+### G1. Model architecture (Qwen2.5-1.5B)
 
 | symbol | meaning | value |
 |---|---|---|
@@ -24,39 +26,39 @@ hardware specification, and one measured quantity: wall-clock time.
 | `d_h` | head dimension | 128 |
 | `F` | MLP intermediate size | 8,960 |
 | `V` | vocabulary size | 151,936 |
-| — | embedding and LM head | tied (one matrix) |
-| — | attention projections | biased on Q, K, V; unbiased on O |
-| — | MLP | gated: `gate`, `up`, `down` |
-| — | normalization | RMSNorm, 2 per layer + 1 final |
+|  | embedding and LM head | tied (one matrix) |
+|  | attention projections | biased on Q, K, V; unbiased on O |
+|  | MLP | gated: `gate`, `up`, `down` |
+|  | normalization | RMSNorm, 2 per layer + 1 final |
 
 Note `H · d_h = 12 × 128 = 1,536 = d`, and `H_kv · d_h = 2 × 128 = 256`.
 
-### G2 — Hardware (NVIDIA A10)
+### G2. Hardware (NVIDIA A10)
 
 | symbol | meaning | value |
 |---|---|---|
 | `Π` | peak fp16 dense throughput | 125 × 10¹² FLOP/s |
 | `β` | memory bandwidth | 600 × 10⁹ B/s |
-| — | device memory | 24 GB |
+|  | device memory | 24 GB |
 
-### G3 — Workload
+### G3. Workload
 
 | symbol | meaning | value |
 |---|---|---|
 | `P` | prompt length in tokens | 16, 64, 256, 1024, 4096 |
 | `N` | tokens generated per run | 256 |
-| — | precision | fp16 (2 bytes/value) |
-| — | decoding | greedy, fixed seed |
+|  | precision | fp16 (2 bytes/value) |
+|  | decoding | greedy, fixed seed |
 
-### G4 — Attention backend
+### G4. Attention backend
 
 `attn_implementation` is pinned to `sdpa` in `infer/runtime.py`, which is the
 value transformers selected for this baseline before it was pinned.
 
 PyTorch's SDPA is a dispatcher, not an implementation: at each call it selects
-among flash, mem-efficient, and math backends. The first two skip
-causally-masked score entries; math computes the full matrix and masks
-afterwards. Flash and mem-efficient are eligible only when no explicit mask
+among flash, mem efficient, and math backends. The first two skip
+causally masked score entries; math computes the full matrix and masks
+afterwards. Flash and mem efficient are eligible only when no explicit mask
 tensor is passed and `is_causal=True`
 (`transformers/integrations/sdpa_attention.py`).
 
@@ -71,7 +73,7 @@ q_length   == kv_length
 ```
 
 This excludes the math backend, so the masked half is skipped. Flash versus
-mem-efficient is not distinguished, and does not need to be — both skip it,
+mem efficient is not distinguished, and does not need to be: both skip it,
 so the FLOP count is identical either way.
 
 These arguments are chosen by transformers in Python, independent of the
@@ -81,15 +83,15 @@ device, so this holds for the recorded A10 runs.
 
 ## II. Definitions
 
-**D1 — FLOP.** One floating-point operation: a single multiply or a single
+**D1. FLOP.** One floating point operation: a single multiply or a single
 add.
 
-**D2 — Token-forward.** One token passed through the model one time. The
+**D2. Token forward.** One token passed through the model one time. The
 natural unit of work for an engine whose cost scales with tokens processed
 rather than tokens emitted.
 
-**D3 — Achieved throughput.** Total FLOPs performed during a run divided by
-that run's wall-clock duration.
+**D3. Achieved throughput.** Total FLOPs performed during a run divided by
+that run's wall clock duration.
 
 ```
         F(P)
@@ -97,14 +99,14 @@ R  =  ────────
          t
 ```
 
-**D4 — MFU** (Model FLOPs Utilization). Achieved throughput as a fraction of
+**D4. MFU** (model FLOPs utilization). Achieved throughput as a fraction of
 hardware peak.
 
 ```
 MFU  =  R / Π
 ```
 
-**D5 — Sequence length at step i.** In an engine with no KV cache, step `i`
+**D5. Sequence length at step i.** In an engine with no KV cache, step `i`
 processes the whole sequence built so far:
 
 ```
@@ -115,7 +117,7 @@ n_i  =  P + i        for  i = 0, 1, …, N−1
 
 ## III. Lemmas
 
-### L1 — Cost of a matrix multiply
+### L1. Cost of a matrix multiply
 
 Let `C = A @ B` with `A : [n × d]` and `B : [d × m]`.
 
@@ -126,7 +128,7 @@ requiring `d` multiplies and `d − 1` adds, i.e. `2d − 1 ≈ 2d` FLOPs.
 FLOPs(matmul)  =  2 · n · d · m
 ```
 
-### L2 — Cost of a linear layer
+### L2. Cost of a linear layer
 
 A linear layer holds a weight matrix `[d_in × d_out]`, therefore
 `d_in · d_out` parameters. Applying it to `n` tokens is the matmul
@@ -139,7 +141,7 @@ FLOPs(linear)  =  2 · n · d_in · d_out  =  2 · n · (parameters in the layer
 **Corollary.** Summed over every linear layer, pushing `n` tokens through a
 network of `N_params` parameters costs `2 · n · N_params`.
 
-### L3 — Parameter census
+### L3. Parameter census
 
 Counted directly from G1, one transformer layer contains:
 
@@ -158,7 +160,7 @@ Counted directly from G1, one transformer layer contains:
 
 Note the effect of GQA: `k_proj` and `v_proj` map into `H_kv · d_h = 256`
 dimensions rather than `d = 1536`, making them 6× smaller than under
-multi-head attention.
+multi head attention.
 
 Totalling across the model:
 
@@ -183,7 +185,7 @@ B  =  1,310,340,608     (body parameters)
 E  =    233,373,696     (embedding = LM head)
 ```
 
-### L4 — Cost of the body, per forward pass
+### L4. Cost of the body, per forward pass
 
 By the corollary to L2, restricted to body parameters:
 
@@ -191,7 +193,7 @@ By the corollary to L2, restricted to body parameters:
 FLOPs_body(n)  =  2 · B · n
 ```
 
-### L5 — Cost of the LM head, per forward pass
+### L5. Cost of the LM head, per forward pass
 
 The engine passes `logits_to_keep = 1`, so the vocabulary projection is
 applied to the final position only, not to all `n` positions:
@@ -204,7 +206,7 @@ This term is independent of `n`. Applied to every position instead it would
 be `2 · E · n`, which at `n = 4096` is 1.9 TFLOP per pass rather than
 0.0005 TFLOP.
 
-### L6 — Cost of attention, per forward pass
+### L6. Cost of attention, per forward pass
 
 Attention contains two matmuls with no associated parameters, so L2 does not
 apply. Per layer, per query head:
@@ -236,7 +238,7 @@ term is halved:
 FLOPs_attn(n)  =  ½ · 4 · d · L · n²  =  86,016 · n²
 ```
 
-The residual approximation is tile granularity — blocks straddling the
+The residual approximation is tile granularity: blocks straddling the
 diagonal are computed in full. That error is `O(n)` against an `O(n²)` term
 and is negligible at these lengths.
 
@@ -246,7 +248,7 @@ Define:
 A  =  ½ · 4 · d · L  =  86,016
 ```
 
-### L7 — Summation across the generation loop
+### L7. Summation across the generation loop
 
 By D5, over `N = 256` steps:
 
@@ -280,7 +282,7 @@ F(P)  =  2·B·Σn  +  2·E·N  +  A·Σn²
 with `B = 1,310,340,608`, `E = 233,373,696`, `A = 86,016`, and `Σn`, `Σn²`
 as given by L7.
 
-By D3 and D4, for a measured wall-clock time `t`:
+By D3 and D4, for a measured wall clock time `t`:
 
 ```
 MFU  =  F(P) / (t · Π)
@@ -349,3 +351,64 @@ MFU  =  17.3 / 125                      =  13.8%
 | 256 | 98,176 | 39,048,576 | 257.3 | 0.1 | 3.4 | 260.8 TF | 7.29 s | 35.8 | 28.6% |
 | 1024 | 294,784 | 340,841,856 | 772.5 | 0.1 | 29.3 | 802.0 TF | 18.69 s | 42.9 | 34.3% |
 | 4096 | 1,081,216 | 4,567,913,856 | 2833.5 | 0.1 | 392.9 | 3226.5 TF | 71.15 s | 45.4 | 36.3% |
+
+---
+
+## VII. Bandwidth
+
+MFU answers whether the arithmetic units are busy. For decode they are not, and
+the question that carries information is whether the memory bus is.
+
+**D6. MBU** (model bandwidth utilization). Bytes that must cross the memory bus
+during a run, divided by what the bus could have delivered in the same time:
+
+```
+MBU  =  (B / t) / β
+```
+
+### L8. Bytes per forward pass
+
+Every parameter is read once per forward pass, however many tokens ride through
+it. At 2 bytes each:
+
+```
+W  =  2 × 1,543,714,304  =  3,087,428,608 B  =  3.09 GB
+```
+
+An engine with no cache holds no other persistent state, so a naive pass moves
+`W` and nothing else. An engine with a cache also reads the whole cache back
+every decode step. At step `j` the cache holds `P + j` positions at 28,672 bytes
+each (G1, and the same figure derived in the arithmetic appendix), so averaged
+across `N` steps:
+
+```
+B_cached  =  W  +  (P + N/2) · 28,672
+```
+
+This counts weights and cache only. Activations are ignored: they are small at
+batch 1, and most of their traffic never leaves on chip memory. Nothing here
+observes actual DRAM traffic, so every byte figure is derived in the same sense
+the FLOP figures are.
+
+### Results
+
+Per decode step, with step time taken as `decode time / (N − 1)`:
+
+| `P` | engine | bytes/step | step time | achieved | MBU |
+|---|---|---|---|---|---|
+| 16 | naive | 3.09 GB | 21.90 ms | 141.0 GB/s | 23.5% |
+| 64 | naive | 3.09 GB | 22.11 ms | 139.6 GB/s | 23.3% |
+| 256 | naive | 3.09 GB | 28.51 ms | 108.3 GB/s | 18.1% |
+| 1024 | naive | 3.09 GB | 73.07 ms | 42.3 GB/s | 7.0% |
+| 4096 | naive | 3.09 GB | 278.00 ms | 11.1 GB/s | 1.9% |
+| 16 | cached | 3.09 GB | 22.70 ms | 136.2 GB/s | 22.7% |
+| 64 | cached | 3.09 GB | 21.88 ms | 141.4 GB/s | 23.6% |
+| 256 | cached | 3.10 GB | 21.64 ms | 143.2 GB/s | 23.9% |
+| 1024 | cached | 3.12 GB | 21.90 ms | 142.5 GB/s | 23.8% |
+| 4096 | cached | 3.21 GB | 21.83 ms | 147.0 GB/s | 24.5% |
+
+The naive engine's bytes per step are constant while its step time grows, so
+its MBU falls away. The cached engine's step time is constant, so its MBU sits
+between 22.7% and 24.5% at every prompt length. Neither engine gets close to
+600 GB/s, and the reason is in [Part 2](/writing/inference/cached): the bus is idle
+most of the step, waiting for the host.

@@ -10,9 +10,11 @@ import { cn } from "@/lib/utils";
  * prediction the next one tests, so "these are in an order" is information a
  * screen reader should be given rather than a visual accident of the numbers.
  *
- * Shared verbatim by the home card, the series hub and the writing index. That
- * is the abstraction worth having here: the list of parts genuinely is the same
- * object in all three places, whereas the cards around it are not.
+ * Used on the series hub's parts section, and nowhere else. The home page
+ * card used to render this too; it was removed so a first-time visitor could
+ * not skip the introduction from the home page (see `series-card.tsx`). The
+ * hub's introduction ends with `PartNav`, not another `PartList`: a reader who
+ * just read the introduction wants the next part, not the whole list again.
  *
  * The number is `padStart(2)` so a two digit part does not shift the titles.
  */

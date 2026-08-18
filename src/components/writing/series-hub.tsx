@@ -4,6 +4,7 @@ import { Container } from "@/components/layout/container";
 import { ArticleBody } from "@/components/writing/article-body";
 import { Blurb } from "@/components/writing/blurb";
 import { AppendixList, PartList } from "@/components/writing/part-list";
+import { PartNav } from "@/components/writing/part-nav";
 import { hueStyle } from "@/data/hues";
 import type { Doc } from "@/data/mdx";
 import type { SeriesWithParts } from "@/data/writing";
@@ -12,11 +13,18 @@ import type { SeriesWithParts } from "@/data/writing";
  * A series' front door: what it is, what has been written, and how it is all
  * measured.
  *
- * The parts come BEFORE the methodology. The methodology is what makes the
+ * The parts come BEFORE the introduction. The introduction is what makes the
  * parts legible, but it runs to a couple of hundred lines, and a reader who
  * arrived wanting part 2 should not have to scroll past the whole of it to find
  * the link. The prose sits under its own heading below, where anyone who wants
  * the ground rules can still find them.
+ *
+ * That heading ends with a `PartNav` pointing at `parts[0]`, so a reader who
+ * scrolls through the introduction top to bottom lands on the same "Part 1
+ * &rarr;" affordance every other part ends with, rather than a dead end. The
+ * home page card links here rather than to any single part, for the same
+ * reason: this is the one page that offers the introduction before it offers
+ * part 1.
  *
  * `intro` is optional. A series with no index.mdx renders from the registry and
  * its parts alone, so the hub works from the first part published.
@@ -86,18 +94,23 @@ export function SeriesHub({
         )}
 
         {intro && (
-          <section className="mt-block" aria-labelledby="method-heading">
+          <section className="mt-block" aria-labelledby="intro-heading">
             <h2
-              id="method-heading"
+              id="intro-heading"
               className="max-w-measure border-t border-border/60 pt-8 font-mono text-meta uppercase tracking-widest text-muted-foreground"
             >
-              Method
+              Introduction
             </h2>
             <ArticleBody
               source={intro.source}
               headings={intro.headings}
               className="mt-6"
             />
+            {parts.length > 0 && (
+              <div className="max-w-measure">
+                <PartNav next={parts[0]} />
+              </div>
+            )}
           </section>
         )}
       </div>
