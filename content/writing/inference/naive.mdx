@@ -3,8 +3,8 @@ title: "No cache at all"
 publishedAt: "2026-08-08"
 series: "inference"
 part: 1
-summary: "The baseline. Every step reprocesses the whole sequence, and 99.6% of the arithmetic at a 4096 token prompt is recomputing values that cannot change."
-result: "45.66 tok/s at p16, falling 12.7x to 3.60 at p4096"
+summary: "Every step reprocesses the whole sequence, and 99.6% of the arithmetic at a 4096 token prompt is recomputing values that cannot change."
+result: "Straightforward decode loop with no optimizations."
 code: "https://github.com/DanielF21/inference/tree/main/infer/engines/naive"
 ---
 

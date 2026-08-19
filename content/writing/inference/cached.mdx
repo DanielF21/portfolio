@@ -4,14 +4,14 @@ publishedAt: "2026-08-10"
 series: "inference"
 part: 2
 summary: "One variable changed. Decode goes flat across a 256x range of prompt lengths, and the bottleneck moves from arithmetic to the host."
-result: "Flat at 44 to 46 tok/s, 12.73x at p4096 and 0.96x at p16"
+result: "Caching earlier attention computations."
 code: "https://github.com/DanielF21/inference/tree/main/infer/engines/cached"
 ---
 
 Part 1 kept nothing between steps, so every step ran the model over the whole
 sequence built so far and rederived what the earlier steps had already worked
 out. At a 4096 token prompt that cost 1,081,216 token forwards to emit 256
-tokens, and throughput fell from 45.66 tokens/sat a 16 token prompt
+tokens, and throughput fell from 45.66 tokens/s at a 16 token prompt
 to 3.60 at a 4096 token one. This part keeps those intermediate results
 instead.
 
