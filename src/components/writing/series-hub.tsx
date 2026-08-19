@@ -13,18 +13,21 @@ import type { SeriesWithParts } from "@/data/writing";
  * A series' front door: what it is, what has been written, and how it is all
  * measured.
  *
- * The parts come BEFORE the introduction. The introduction is what makes the
- * parts legible, but it runs to a couple of hundred lines, and a reader who
- * arrived wanting part 2 should not have to scroll past the whole of it to find
- * the link. The prose sits under its own heading below, where anyone who wants
- * the ground rules can still find them.
+ * The introduction comes BEFORE the parts. It used to be the other way
+ * around, on the theory that a reader who already wanted part 2 shouldn't
+ * have to scroll past the introduction to find it. In practice almost no one
+ * reaches part 2 that way: finishing part 1 already ends in a "Part 2 &rarr;"
+ * link (`PartNav`, from the per-part page) that never touches this page at
+ * all. The hub is overwhelmingly a first visit, and a first-time reader who
+ * sees the parts list immediately, right under the header, treats it as the
+ * thing to click and never scrolls down to the introduction that explains
+ * what the numbers in it mean.
  *
- * That heading ends with a `PartNav` pointing at `parts[0]`, so a reader who
- * scrolls through the introduction top to bottom lands on the same "Part 1
- * &rarr;" affordance every other part ends with, rather than a dead end. The
- * home page card links here rather than to any single part, for the same
- * reason: this is the one page that offers the introduction before it offers
- * part 1.
+ * The introduction ends with a `PartNav` pointing at `parts[0]`, so a reader
+ * who scrolls through it top to bottom lands on the same "Part 1 &rarr;"
+ * affordance every other part ends with, rather than a dead end. The parts
+ * list (and the divider above it) sits below, for anyone who came back
+ * already knowing what they want.
  *
  * `intro` is optional. A series with no index.mdx renders from the registry and
  * its parts alone, so the hub works from the first part published.
@@ -68,10 +71,38 @@ export function SeriesHub({
           )}
         </header>
 
-        <section className="mt-10 max-w-measure" aria-labelledby="parts-heading">
+        {intro && (
+          <section className="mt-10" aria-labelledby="intro-heading">
+            <h2
+              id="intro-heading"
+              className="max-w-measure font-mono text-meta uppercase tracking-widest text-muted-foreground"
+            >
+              Introduction
+            </h2>
+            <ArticleBody
+              source={intro.source}
+              headings={intro.headings}
+              className="mt-6"
+            />
+            {parts.length > 0 && (
+              <div className="max-w-measure">
+                <PartNav next={parts[0]} />
+              </div>
+            )}
+          </section>
+        )}
+
+        <section
+          className={intro ? "mt-block max-w-measure" : "mt-10 max-w-measure"}
+          aria-labelledby="parts-heading"
+        >
           <h2
             id="parts-heading"
-            className="font-mono text-meta uppercase tracking-widest text-muted-foreground"
+            className={
+              intro
+                ? "border-t border-border/60 pt-8 font-mono text-meta uppercase tracking-widest text-muted-foreground"
+                : "font-mono text-meta uppercase tracking-widest text-muted-foreground"
+            }
           >
             {parts.length === 1 ? "1 part" : `${parts.length} parts`}
           </h2>
@@ -90,27 +121,6 @@ export function SeriesHub({
               Supporting
             </h2>
             <AppendixList parts={appendices} className="mt-2" />
-          </section>
-        )}
-
-        {intro && (
-          <section className="mt-block" aria-labelledby="intro-heading">
-            <h2
-              id="intro-heading"
-              className="max-w-measure border-t border-border/60 pt-8 font-mono text-meta uppercase tracking-widest text-muted-foreground"
-            >
-              Introduction
-            </h2>
-            <ArticleBody
-              source={intro.source}
-              headings={intro.headings}
-              className="mt-6"
-            />
-            {parts.length > 0 && (
-              <div className="max-w-measure">
-                <PartNav next={parts[0]} />
-              </div>
-            )}
           </section>
         )}
       </div>

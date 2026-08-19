@@ -2,12 +2,13 @@
 title: "The memory arithmetic"
 publishedAt: "2026-08-08"
 series: "inference"
-summary: "Where 28 KiB per token, 3.09 GB of weights, 19 GiB free and the 2 GiB pool cap come from."
+summary: "Where 28 KiB per token, 3.09 GB of weights, the 208 FLOP per byte ridge point, the 194 tok/s ceiling, 19 GiB free and the 2 GiB pool cap come from."
 ---
 
-Backing derivations for [the series' ground rules](/writing/inference). Four
-numbers come out of this file: 28 KiB of cache per token, 3.09 GB of weights,
-roughly 19 GiB free on the card, and a 2 GiB pool cap. The formulas are from kipply's
+Backing derivations for [the series' ground rules](/writing/inference). Six
+numbers come out of this file: 28 KiB of cache per token, 3.09 GB of weights, a
+ridge point of 208 FLOP per byte, a batch 1 ceiling of 194 tok/s, roughly
+19 GiB free on the card, and a 2 GiB pool cap. The formulas are from kipply's
 [Transformer Inference Arithmetic](https://kipp.ly/p/transformer-inference-arithmetic)
 (2022).
 
@@ -52,6 +53,36 @@ head attention the same model would spend `2 x 2 x 28 x 12 x 128` = 168 KiB per
 token, **6x more**. Cheap keys and values mean capacity is not the first thing
 that binds on this model, which changes which optimizations are worth building
 and in what order.
+
+## The ridge point
+
+Arithmetic intensity is operations performed per byte moved. A chip's ridge
+point is the intensity at which its arithmetic units and its memory system
+would finish at the same moment, so it is peak compute over peak bandwidth:
+
+```
+125 TFLOPS / 600 GB/s = 208 FLOP per byte
+```
+
+Work below 208 FLOP per byte leaves the arithmetic units idle waiting on data.
+Work above it leaves the memory system idle instead. A forward pass over `n`
+tokens has an intensity of about `n`, because the weights are read once per
+pass however many tokens ride through it, so the line falls at 208 tokens.
+Prefill over a long prompt sits above it and every decode step sits far below.
+
+## The ceiling on one sequence
+
+A decode step produces one token and has to read every weight to do it.
+Reading them once is therefore the fastest that token can possibly appear:
+
+```
+3.09 GB / 600 GB/s = 5.15 ms per token = 194 tok/s
+```
+
+This is a ceiling for a single sequence, not for the card. Running `B`
+sequences through one pass reads the same weights once and produces `B`
+tokens, which is why batching raises the aggregate figure and this number does
+not move.
 
 ## What the card actually has
 

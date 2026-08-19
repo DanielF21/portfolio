@@ -116,7 +116,7 @@ const READING: Record<string, Reading> = {
           },
           {
             term: "Decode",
-            text: "One forward pass per output token, reading every weight to produce one. Memory bound, and it sets tokens per second.",
+            text: "One forward pass per output token, reading every weight to produce one. Memory bound, and it sets tokens/s.",
           },
         ],
       },

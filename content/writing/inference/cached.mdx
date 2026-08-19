@@ -8,71 +8,45 @@ result: "Flat at 44 to 46 tok/s, 12.73x at p4096 and 0.96x at p16"
 code: "https://github.com/DanielF21/inference/tree/main/infer/engines/cached"
 ---
 
-**Caching keys and values makes decode flat: 44.05 to 46.21 tokens per second
-across a 256x range of prompt lengths, where Part 1 fell 12.7x over the same
-range.** At a 4096 token prompt that is a 12.73x speedup. At a 16 token prompt
-it is a 0.96x regression, and the cache costs more than it saves. The
-interesting number is not the speedup, it is what is left: the GPU now has data
-to move for 5.2 ms of every 22 ms step and sits idle for the other 76%.
+Part 1 kept nothing between steps, so every step ran the model over the whole
+sequence built so far and rederived what the earlier steps had already worked
+out. At a 4096 token prompt that cost 1,081,216 token forwards to emit 256
+tokens, and throughput fell from 45.66 tokens/sat a 16 token prompt
+to 3.60 at a 4096 token one. This part keeps those intermediate results
+instead.
 
-## What I expected, and why the constant was wrong
+**Decode goes flat: 44.05 to 46.21 tokens/sacross a 256x range of
+prompt lengths.** At a 4096 token prompt that is a 12.73x speedup over Part 1.
+At a 16 token prompt it is 0.96x, 3.5% slower, because the cache costs more
+than it saves there.
 
-Part 1 ended with this, written before any of it existed:
-
-> A cached step has about 5.1 ms of GPU work against a 19.32 ms host floor.
-> Step time is the larger of the two, since the CPU runs ahead of the GPU, so
-> the cache should land at **19 to 20 ms per step, about 50 tok/s, flat across
-> every prompt length**, and not at the 194 tok/s the bandwidth alone would
-> allow.
-
-Flat was right. The level was not.
-
-| prompt | predicted | measured | predicted speedup | measured speedup |
-|---|---|---|---|---|
-| p16 | ~52 tok/s | 44.05 | ~1.1x | **0.96x** |
-| p64 | ~52 | 45.70 | ~1.2x | 1.01x |
-| p256 | ~52 | 46.21 | ~1.5x | 1.32x |
-| p1024 | ~52 | 45.67 | ~3.8x | 3.34x |
-| p4096 | ~52 | 45.80 | ~14x | 12.73x |
-
-![Predicted decode throughput against measured](/figures/inference/cached-prediction.png)
-
-The dashed line is the prediction, flat at 52 tok/s. The measured line is flat
-too, and 12 to 15% under it at every prompt length.
-
-**Each prediction made was 12 to 15% off.** A prediction that misses by a
-consistent factor is more useful than one that misses randomly, because the
-constant is findable.
-
-The constant was the floor. 19.32 ms was measured on a forward pass with no
-cache attached to it at all, and this engine does not run that pass. Every
-forward now also writes a key and a value into the buffer for each of the 28
-layers, dispatches through the cache container once per layer, reads back how
-long the sequence is so that positional encoding lands in the right place, and
-asks the cache for the sizes the attention mask needs. None of that existed in
-the pass the floor was measured on. The gap between the 19.32 ms floor and the
-21.6 to 22.7 ms this engine actually spends per step is 2.3 to 3.4 ms, and that
-bookkeeping is what sits in it. I did not time the pieces separately, so this
-accounts for the gap rather than proving it.
-
-**So the floor was not wrong, its scope was.** A floor measured on one engine
-does not carry to the next one when the next one adds work to the same path,
-and every part after this one has to measure its own.
-
-The prediction that p16 would be roughly break even was the closest thing to a
-hit, and it was still optimistic. It came out below 1x.
+The speedup is not the interesting number. What is left over is. The GPU has
+data to move for 5.2 ms of every 22 ms step and sits idle for the other 76%,
+waiting on the CPU.
 
 ## What a cache is, and what changed
 
 Attention is causal, so no token ever attends to a token that comes after it.
-That means the key and value vectors a token produces are fixed the moment it
-is produced, and every later step reads exactly the same numbers back. Part 1
-recomputed them from scratch 255 times. This engine keeps them.
+Each token produces a key vector and a value vector in every layer of the
+model. Later tokens compare themselves against those keys and take a weighted
+sum of those values.
+
+Because attention only ever looks backwards, a token's key and value are fixed
+the moment it is produced, and every later step reads back exactly the same
+numbers. Part 1 recomputed them from scratch 255 times. This engine keeps
+them, which is what a KV cache is.
 
 The change is one buffer per layer, allocated once at the full size the run
-will need, holding one key and one value vector per position. Prefill fills the
-first `P` slots; each decode step writes one more and reads the rest. Decode
-feeds a single token into the model instead of the entire sequence.
+will need, holding one key and one value per position.
+
+The two halves of the loop use it differently, and they are measured
+separately throughout. **Prefill** is the first pass, the one over the prompt;
+it fills the first `P` slots, and its cost is reported as time to first token,
+the wait before anything appears. Every pass after it is a **decode** step,
+which writes one more slot and reads the rest, so it feeds a single token into
+the model instead of the entire sequence. Its cost is reported as inter token
+latency, the gap between one token and the next, and tokens/s is that
+gap inverted.
 
 Nothing else moved: same model, same precision, same GPU, same prompts, same
 sampling, same seed, same run counts.
@@ -90,7 +64,8 @@ sampling, same seed, same run counts.
 | p1024 | 1024 | 55.2 ms | 5.639 s | 45.67 tok/s | 21.9 ms | 22.4 ms | 2.98 GiB |
 | p4096 | 4096 | 247.7 ms | 5.815 s | 45.80 tok/s | 21.8 ms | 22.3 ms | 3.25 GiB |
 
-Same conventions as Part 1: totals are means, latencies are medians, decode
+`TTFT` is time to first token and `ITL` is inter token latency. Same
+conventions as Part 1: totals are means, latencies are medians, decode
 throughput excludes prefill, and run to run spread is about 1.0% at p4096
 against Part 1's 0.08% because the run is twelve times shorter.
 
@@ -104,35 +79,49 @@ against Part 1's 0.08% because the run is twelve times shorter.
 
 ![Inter token latency against prompt length, both engines](/figures/inference/cached-itl.png)
 
+Cost per token against prompt length, five runs per prompt. Part 1 rises with
+the prompt because each of its steps reprocesses the whole sequence. Part 2 is
+flat at about 22 ms. The dashed lines are the two controls from Part 1: the
+5.15 ms of memory traffic a decode step genuinely needs, and the 19.32 ms a
+forward pass costs before the GPU does anything useful. This engine sits just
+above the upper one at every prompt length.
+
 **The 12.73x at p4096 is entirely Part 1's degradation, not this engine's
 achievement.** This engine runs at 45.80 tok/s at 4096 tokens and 44.05 at 16.
 It gains nothing from the longer context; it just stops losing. Throughput
 varies 5% across a 256x change in prompt length.
 
-**p16 is a net regression at 0.96x**, and break even lands at about 64 tokens.
-Below that the bookkeeping a cache requires costs more than the recomputation
-it removes.
+**p16 is a net regression at 0.96x, 3.5% slower**, and break even lands at
+about 64 tokens. Below that the bookkeeping a cache requires costs more than
+the recomputation it removes.
 
-Both engines produce the same 256 token ids at all five prompt lengths. That is
-identity of tokens under a greedy argmax and does not mean the logits are
-identical; attention runs over the full square in Part 1 and over one row here,
-so the two almost certainly differ in the last few decimal places without ever
-differing enough to change which token wins.
+Both engines produce the same 256 tokens at all five prompt lengths. That is
+identity of tokens under a greedy choice, not identity of the numbers behind
+them. Attention runs over the full square in Part 1 and over a single row
+here, so the two almost certainly differ in the last few decimal places. They
+never differ enough to change which token wins.
 
 ![Time to first token against prompt length, both engines](/figures/inference/cached-ttft.png)
 
 Prefill is the same operation in both engines and was supposed to serve as a
-control. The lines cross instead, and neither direction is noise. That is a
-caveat below rather than a finding here.
+control. The lines cross instead, and neither direction is noise. This part
+does not explain it, and the Caveats section says what it would take to.
+
+Decode is what the cache changed, so decode is what the rest of this part is
+about.
 
 ## The two engines end up on opposite sides of the roofline
 
+A chip has two ways to run out. It can run out of arithmetic units and it can
+run out of memory bandwidth, and the roofline is the pair of limits taken
+together. Two metrics say which one a piece of work is up against.
+
 MFU, model FLOPs utilization, is arithmetic performed over arithmetic
 available. MBU, model bandwidth utilization, is its counterpart for memory:
-bytes the engine must move divided by what the memory system can deliver in the
-same time. MFU asks whether the arithmetic units are busy, MBU asks whether the
-memory bus is. An engine that is bad at one and good at the other is not
-failing, it is telling you which side of the machine it lives on.
+bytes the engine must move, divided by what the memory system can deliver in
+the same time. MFU asks whether the arithmetic units are busy. MBU asks
+whether the memory bus is. An engine that is bad at one and good at the other
+is not failing, it is telling you which side of the machine it lives on.
 
 | prompt | Part 1 MFU | Part 1 MBU | Part 2 MFU | Part 2 MBU |
 |---|---|---|---|---|
@@ -156,17 +145,18 @@ Part 1 at p4096   3226.6 TF
 Part 2 at p4096     13.2 TF     a factor of 244
 ```
 
-Part 1 derived a 248x ratio of token forwards from the architecture alone, and
-244x is close but not the same number. The gap is real and worth naming: token
-forwards weight every token equally, and FLOPs do not, because attention is
-quadratic in sequence length. Part 1 spreads its quadratic term across 256
-growing passes; this engine pays it once, over the prompt, during prefill. That
-single prefill pass is 1.4 TF of this engine's 13.2 TF total.
+Part 1 derived a 248x ratio of token forwards from the architecture alone.
+This is 244x, close but not the same number, and the gap is worth naming. A
+token forward counts every token equally. FLOPs do not, because attention is
+quadratic in the length of the sequence. Part 1 spreads that quadratic term
+across 256 growing passes, while this engine pays it once, over the prompt,
+during prefill. That single prefill pass is 1.4 TF of this engine's 13.2 TF
+total.
 
-Either way the conclusion is the same, and it is the one Part 1 arrived at from
-the other side. Part 1's 36.3% MFU was the utilization of recomputing values
-that could not change, and 244x is the measurement standing behind an argument
-Part 1 could only make from the architecture.
+Either way the conclusion is the same one Part 1 reached from the other side.
+Part 1's 36.3% MFU was the utilization of recomputing values that could not
+change, and 244x is a measurement standing behind an argument Part 1 could
+only make from the architecture.
 
 The FLOP and byte accounting is derived, not observed. It assumes the weights
 are read exactly once per pass and the cache is read in full every decode step.
@@ -174,32 +164,39 @@ Nothing here watches actual DRAM traffic.
 
 ## Memory
 
-| prompt | Part 1 | Part 2 | delta | cache size |
-|---|---|---|---|---|
-| p16 | 2970.9 MiB | 2961.9 MiB | -9.0 | 7.4 MiB |
-| p64 | 2974.9 MiB | 2968.2 MiB | -6.7 | 8.8 MiB |
-| p256 | 2987.1 MiB | 2983.7 MiB | -3.5 | 14.0 MiB |
-| p1024 | 3036.0 MiB | 3054.4 MiB | +18.5 | 35.0 MiB |
-| p4096 | 3231.3 MiB | 3332.5 MiB | +101.1 | 119.0 MiB |
+| prompt | Part 1 | Part 2 | delta | cache size | unaccounted |
+|---|---|---|---|---|---|
+| p16 | 2970.9 MiB | 2961.9 MiB | -9.0 | 7.4 MiB | 16.4 MiB |
+| p64 | 2974.9 MiB | 2968.2 MiB | -6.7 | 8.8 MiB | 15.5 MiB |
+| p256 | 2987.1 MiB | 2983.7 MiB | -3.5 | 14.0 MiB | 17.5 MiB |
+| p1024 | 3036.0 MiB | 3054.4 MiB | +18.5 | 35.0 MiB | 16.5 MiB |
+| p4096 | 3231.3 MiB | 3332.5 MiB | +101.1 | 119.0 MiB | 17.9 MiB |
 
 `cache size` is `(P + 256) x 28 KiB`, from the per token arithmetic in
-[Part 0](/writing/inference). **Holding a cache is cheaper than not holding one at
-short prompts and more expensive at long ones, crossing over between 256 and
-1024 tokens.** The direction follows from two effects pulling against each
-other: this engine holds state that Part 1 never held, and Part 1 materialized
-activations for forward passes over the entire sequence that this engine never
-runs.
+[Part 0](/writing/inference).
 
-The magnitude does not follow. Cache size minus delta is 16.4, 15.5, 17.5, 16.5
-and 17.9 MiB, roughly constant where an activation based account predicts it
-should grow with sequence length. Recorded as an open question.
+**Holding a cache is cheaper than not holding one at short prompts and more
+expensive at long ones, crossing over between 256 and 1024 tokens.** Two
+effects pull against each other. This engine holds state that Part 1 never
+held. Part 1 in turn materialized intermediate values for forward passes over
+the entire sequence, and this engine never runs those passes.
+
+The direction follows from that. The magnitude does not. The last column is
+the cache size that the memory delta fails to account for, and it stays near
+17 MiB at every prompt length, where an account based on those intermediate
+values predicts it should grow with the sequence. Recorded as an open
+question.
 
 ## Where a decode step actually goes
 
+Capacity is not what a cache costs on this card, then. What it costs is
+traffic, because every one of those bytes has to be read again on every step.
+
 Bandwidth is the number that means something for decode, and it says the same
-thing at every prompt length. This engine moves about 3.1 GB per decode step,
-the weights read once plus the cache read in full, against 600 GB/s. That is
-5.2 ms of traffic inside a 22 ms step.
+thing at every prompt length. Every decode step reads the weights once, 3.09
+GB, plus the cache in full, which runs from 7.8 MB at p16 to 125 MB at p4096.
+Against 600 GB/s that is 5.16 ms of traffic at the shortest prompt and 5.36 ms
+at the longest, inside a step of about 22 ms either way.
 
 ![Where a decode step goes](/figures/inference/cached-step-budget.png)
 
@@ -210,14 +207,16 @@ compute and 24.5% of peak bandwidth, inside a step that is three quarters idle.
 That fraction is worth holding on to, because it is the same number seen from
 two directions. 5.15 ms of weight traffic inside a 21.8 ms step is 23.6%, and
 45.80 tok/s against the 194 tok/s ceiling the bandwidth allows is also 23.6%.
-They are one quotient computed twice, and adding the cache traffic to the
-numerator is what turns it into the 24.5% in the MBU column. So MBU at batch 1
-is not an abstraction: it is the fraction of the fastest single stream this card
-can produce, and this engine is at roughly a quarter of it.
+They are one quotient computed twice. Adding the cache traffic to the
+numerator is what turns it into the 24.5% in the MBU column.
 
-At p16 the two engines have nearly the same MBU, 23.5% and 22.7%. Both are host
-bound at that prompt length and both move the same weights, which is why the
-speedup there is 0.96x rather than anything.
+So MBU at batch 1 is not an abstraction. It is the fraction of the fastest
+single stream this card can produce, and this engine is at roughly a quarter
+of it.
+
+At p16 the two engines have nearly the same MBU, 23.5% and 22.7%. Both are
+host bound at that prompt length and both move the same weights. That is why
+the cache buys nothing there.
 
 ## Caveats
 
@@ -225,24 +224,42 @@ Still one GPU, one model, one seed, batch size 1. Nothing here says anything
 about behaviour under concurrency, which is the only setting where an idle GPU
 actually matters.
 
-Still no vLLM control. Every ceiling in this part is derived from the
-hardware's specification rather than measured against a production engine on
-the same card.
+Still no production engine measured on the same card. Every ceiling in this
+part is derived from the hardware's specification instead.
+
+**The floor for this engine was never measured directly.** The 2.3 to 3.4 ms
+above the old floor is attributed to cache bookkeeping on the strength of what
+that bookkeeping consists of, not on a measurement of it. Running the single
+token forward pass again with a cache attached, and timing the pieces
+separately, would say whether the bookkeeping accounts for the whole gap or
+only part of it. A floor measured on one engine does not carry to the next,
+and this part did not measure its own.
 
 **Prefill was supposed to be a control and it failed.** It is the same
 operation in both engines, so time to first token should not have moved. It
-moved +11.9 ms at p16, +5.7 at p64, +2.9 at p256, then -6.4 at p1024 and -7.8
-at p4096, and the five run distributions do not overlap in either direction
-(p4096 is 254.2 to 256.5 ms in Part 1 against 246.5 to 248.2 ms here).
-The short prompt end fits a fixed setup cost that is exposed when prefill has
-almost no GPU work to hide it behind; the long prompt end needs a second effect
-of the opposite sign, and the two engines did run a day apart on separately
-rented cards. Running both back to back in one container would settle it, and I
+moved in both directions:
+
+| prompt | Part 1 | Part 2 | delta |
+|---|---|---|---|
+| p16 | 22.1 ms | 34.0 ms | +11.9 |
+| p64 | 21.3 ms | 27.0 ms | +5.7 |
+| p256 | 22.2 ms | 25.1 ms | +2.9 |
+| p1024 | 61.6 ms | 55.2 ms | -6.4 |
+| p4096 | 255.5 ms | 247.7 ms | -7.8 |
+
+The five run distributions do not overlap in either direction. At p4096 Part 1
+spans 254.2 to 256.5 ms against 246.5 to 248.2 ms here, so neither sign is
+noise.
+
+The short prompt end fits a fixed setup cost, exposed when prefill has almost
+no GPU work to hide it behind. The long prompt end needs a second effect of
+the opposite sign, and the two engines did run a day apart on separately
+rented cards. Running both back to back in one container would settle it. I
 have not done that.
 
-The constant 16 to 18 MiB memory residual above is the other thing I cannot
-account for. Neither one changes any conclusion in this part, and both get more
-expensive to chase the longer they are left.
+The 16 to 18 MiB memory residual in the table above is the other thing I
+cannot account for. None of these three changes any conclusion in this part,
+and all of them get more expensive to chase the longer they are left.
 
 ## Bottleneck, and what follows
 
@@ -256,8 +273,8 @@ against roughly 19 GiB free.
 Batching is the way to use idle time that is idle for host reasons. The host
 cost is charged per forward pass, not per sequence, so running `B` sequences
 through one pass should produce `B` tokens for roughly the same 22 ms.
-Aggregate throughput should scale with `B` until the extra cache traffic uses up
-the bandwidth currently going spare.
+Aggregate throughput should scale with `B` until the extra cache traffic uses
+up the bandwidth going spare.
 
 ## Prediction, recorded before building batching
 
@@ -272,13 +289,14 @@ the 22 ms budget. At 600 GB/s a 22 ms step can move 13.2 GB; the weights take
 token positions at 28 KiB each. **That is the wall, and at 512 token sequences
 it is around batch 690.**
 
-The A10's ~19 GiB of free memory holds 711,534 positions, so an unconstrained
-pool would hit bandwidth first at every length tested here and capacity would
-never bind at all. That is an artifact of a 1.5B model on a 24 GB card, so from
-the batching engine onward I intend to report a capped pool alongside the
-unconstrained one: 2 GiB, which holds 74,898 positions and makes capacity bind
-first with a 4.7x margin. [The sizing is in Part 0's
-appendix](/writing/inference/arithmetic).
+Capacity would not bind before that. The A10's ~19 GiB of free memory holds
+711,534 token positions, roughly twice what the bandwidth wall allows, so an
+unconstrained pool runs out of bandwidth first at every length tested here.
+That is a property of pairing a 1.5B model with a 24 GB card rather than
+anything an engine does, and it means memory management has nothing to show
+for itself unless the pool is capped deliberately. A 2 GiB cap holds 74,898
+positions and makes capacity bind first with a 4.7x margin. [The sizing is in
+Part 0's appendix](/writing/inference/arithmetic).
 
 ## Reproducing this
 

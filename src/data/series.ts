@@ -64,17 +64,8 @@ export const SERIES: readonly Series[] = [
     slug: "inference",
     title: "Building an inference engine",
     blurb: [
-      "Every token you have ever seen a model produce came out of an " +
-        "inference engine, and almost nobody looks at that layer. I got " +
-        "curious after reading ",
-      {
-        text: "Inference Engineering",
-        href: "https://www.baseten.co/inference-engineering/",
-      },
-      ", and it is a good corner of the stack to be in right now: the " +
-        "constraints are real, and the distance between a model that runs and " +
-        "a model that runs well is enormous. I learn by building, so I am " +
-        "building one. The code is on GitHub.",
+      "I am building an inference engine from scratch to see " +
+        "what it actually takes to make a model fast.",
     ],
     hue: "teal",
     started: "2026-08-08",
