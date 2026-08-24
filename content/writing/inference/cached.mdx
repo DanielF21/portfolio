@@ -15,14 +15,14 @@ tokens, and throughput fell from 45.66 tokens/s at a 16 token prompt
 to 3.60 at a 4096 token one. This part keeps those intermediate results
 instead.
 
-**Decode goes flat: 44.05 to 46.21 tokens/sacross a 256x range of
+**Decode goes flat: 44.05 to 46.21 tokens/s across a 256x range of
 prompt lengths.** At a 4096 token prompt that is a 12.73x speedup over Part 1.
 At a 16 token prompt it is 0.96x, 3.5% slower, because the cache costs more
 than it saves there.
 
-The speedup is not the interesting number. What is left over is. The GPU has
-data to move for 5.2 ms of every 22 ms step and sits idle for the other 76%,
-waiting on the CPU.
+The measurement that matters more than the speedup is what remains inside
+the step. The GPU has data to move for 5.2 ms of every 22 ms step and sits
+idle for the other 76%, waiting on the CPU.
 
 ## What a cache is, and what changed
 
@@ -40,8 +40,8 @@ The change is one buffer per layer, allocated once at the full size the run
 will need, holding one key and one value per position.
 
 The two halves of the loop use it differently, and they are measured
-separately throughout. **Prefill** is the first pass, the one over the prompt;
-it fills the first `P` slots, and its cost is reported as time to first token,
+separately throughout. **Prefill** is the first pass, the one over the prompt.
+It fills the first `P` slots, and its cost is reported as time to first token,
 the wait before anything appears. Every pass after it is a **decode** step,
 which writes one more slot and reads the rest, so it feeds a single token into
 the model instead of the entire sequence. Its cost is reported as inter token
@@ -86,10 +86,10 @@ flat at about 22 ms. The dashed lines are the two controls from Part 1: the
 forward pass costs before the GPU does anything useful. This engine sits just
 above the upper one at every prompt length.
 
-**The 12.73x at p4096 is entirely Part 1's degradation, not this engine's
-achievement.** This engine runs at 45.80 tok/s at 4096 tokens and 44.05 at 16.
-It gains nothing from the longer context; it just stops losing. Throughput
-varies 5% across a 256x change in prompt length.
+**The 12.73x at p4096 measures how far Part 1 had fallen, not how fast this
+engine is.** This engine runs at 45.80 tok/s at 4096 tokens and 44.05 at 16,
+so a longer context no longer costs it any throughput. Throughput varies 5%
+across a 256x change in prompt length.
 
 **p16 is a net regression at 0.96x, 3.5% slower**, and break even lands at
 about 64 tokens. Below that the bookkeeping a cache requires costs more than
@@ -120,8 +120,9 @@ MFU, model FLOPs utilization, is arithmetic performed over arithmetic
 available. MBU, model bandwidth utilization, is its counterpart for memory:
 bytes the engine must move, divided by what the memory system can deliver in
 the same time. MFU asks whether the arithmetic units are busy. MBU asks
-whether the memory bus is. An engine that is bad at one and good at the other
-is not failing, it is telling you which side of the machine it lives on.
+whether data is being read from GPU memory as fast as the card can read it.
+A low score on one next to a high score on the other is not a defect. It
+says which of the two resources limits the work.
 
 | prompt | Part 1 MFU | Part 1 MBU | Part 2 MFU | Part 2 MBU |
 |---|---|---|---|---|
@@ -200,12 +201,11 @@ at the longest, inside a step of about 22 ms either way.
 
 ![Where a decode step goes](/figures/inference/cached-step-budget.png)
 
-**About 76% of every step is the GPU waiting for the host to hand it the next
-instruction.** Not waiting for memory, and certainly not computing: 1.8% of peak
+**About 76% of every step is the GPU waiting for the host, the CPU side of
+the program, to hand it the next instruction.** Not waiting for memory, and certainly not computing: 1.8% of peak
 compute and 24.5% of peak bandwidth, inside a step that is three quarters idle.
 
-That fraction is worth holding on to, because it is the same number seen from
-two directions. 5.15 ms of weight traffic inside a 21.8 ms step is 23.6%, and
+The same fraction appears from two directions. 5.15 ms of weight traffic inside a 21.8 ms step is 23.6%, and
 45.80 tok/s against the 194 tok/s ceiling the bandwidth allows is also 23.6%.
 They are one quotient computed twice. Adding the cache traffic to the
 numerator is what turns it into the 24.5% in the MBU column.
@@ -301,7 +301,7 @@ Part 0's appendix](/writing/inference/arithmetic).
 ## Reproducing this
 
 ```
-uv run modal run modal_app.py --engine cached
+uv run modal run modal_app.py::main --engine cached
 uv run python scripts/roofline.py
 uv run python scripts/analyze.py --parity naive cached
 ```

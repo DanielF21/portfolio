@@ -75,7 +75,7 @@ the model's weights, and at the A10's 600 GB/s that takes 5.15 ms. The three
 shortest prompts sit on the upper line, and the next section is about why.
 
 Run to run variance is small at the long prompts and not at the short ones. The
-five runs at p4096 span 71.126 to 71.185 s, a spread of 0.08%; the five at p16
+five runs at p4096 span 71.126 to 71.185 s, a spread of 0.08%. The five at p16
 span 3.5%, because the same few milliseconds of jitter is a larger fraction of
 a 5.6 second run. All five runs of a given prompt produce byte identical
 output. This is due to our sampling strategy: greedy decoding. Greedy decoding is deterministic because
@@ -94,8 +94,9 @@ is close to pure overhead.
 
 **It costs 19.32 ms, and 18.54 ms of that is the CPU.** The GPU contributes
 under a millisecond at sequence length 1. The model is not one instruction to
-the GPU, it is 1,123 of them, and issuing each one costs the host about
-16.5 µs whether or not there is any work inside it.
+the GPU, it is 1,123 of them, and issuing each one costs the host, the CPU
+side of the program, about 16.5 µs whether or not there is any work inside
+it.
 
 Letting the CPU run ahead of the GPU gives that 19.32 ms. Forcing the two to
 stay in step gives 19.55 ms. The 0.23 ms between them is all the overlap there
@@ -149,8 +150,8 @@ token equally and attention does not: attention's cost grows with the square
 of the sequence.
 
 The same reasoning explains why time to first token is flat at 16, 64 and 256
-tokens. Prefill at those lengths is not measuring prefill, it is measuring the
-cost of asking.
+tokens. Prefill at those lengths is not measuring prefill. It is measuring
+the fixed cost of issuing a forward pass.
 
 ![Time to first token against prompt length](/figures/inference/naive-ttft.png)
 
@@ -237,9 +238,9 @@ times.
 engine hits 36.3% of peak precisely where 99.6% of the work it is
 performing does not need to happen, and it scores 13.8% where it is doing the
 least wasted work of any configuration here. A utilization metric rewards
-keeping the machine busy, and this engine keeps it busy the way a treadmill
-does. The number is not wrong, it is answering a question I should not have
-been asking on its own.
+keeping the machine busy, and it cannot tell useful work from recomputation.
+The number is accurate. On its own it was the wrong metric to judge this
+engine by.
 
 ## Caveats
 
@@ -324,7 +325,8 @@ cache is.
 measured on the forward pass this engine runs, which has no cache attached to
 it. Part 2 attaches one, and that adds bookkeeping to every layer of every
 step, on the same path the floor was measured on. So the floor does not carry
-across to the next engine. The measurement is not wrong; its scope is.
+across to the next engine. The measurement is correct for the pass it was
+made on. Applying it to a pass that does more work was the error.
 
 The prediction above is built on that floor and misses low by 12 to 15% at
 every prompt length as a result, which [Part 2](/writing/inference/cached) scores
@@ -334,8 +336,8 @@ prediction edited after the fact is not a prediction.
 ## Reproducing this
 
 ```
-uv run modal run modal_app.py --engine naive
-uv run python scripts/measure_overhead.py
+uv run modal run modal_app.py::main --engine naive
+uv run modal run scripts/measure_overhead.py::main
 ```
 
 Defaults are the recorded configuration: five runs, two warmup, 256 new tokens,
