@@ -61,7 +61,7 @@ three match exactly.
 
 ## What I expected
 
-Part 2 recorded this prediction, quoted in full:
+Part 2 recorded this prediction:
 
 > Step time should stay near 22 ms as batch size grows, because the 1,123 GPU
 > instructions per pass do not multiply with the number of sequences riding
@@ -232,15 +232,20 @@ row identical, and every position reserved in the cache holding a real token.
 One draw of a realistic mix, 8 and 32 requests with prompts drawn across all
 five lengths and budgets drawn from 64 to 256 tokens, measures the gap.
 
-| B | aggregate decode tok/s | uniform at same width | reserved KV slots that are padding | budget reserved but unspent |
-|---|---|---|---|---|
-| 8 | 124 | 358 at p4096 B=8 | 38.0% | 1.3% |
-| 32 | 148 | 1,393 at p4096 B=32 | 48.3% | 1.5% |
+Both draws happened to include at least one 4096 token prompt, so padding
+stretches every row to 4096 columns. The control is therefore the uniform
+p4096 run at the same row count: a batch whose tensor has exactly the same
+width, but where every position is a real token. The B=32 control is the
+p4096 row in the results table above, and the B=8 control comes from the
+same sweep at the smaller batch size.
 
-Both draws happened to include at least one 4096 token prompt, so both
-batches pad every row to 4096 columns. The comparison column is the uniform
-run at that same width, and the ragged batch reaches roughly a third of it at
-B=8 and a tenth at B=32.
+| B | aggregate decode tok/s | all p4096, same width, no padding | reserved KV slots that are padding | budget reserved but unspent |
+|---|---|---|---|---|
+| 8 | 124 | 358 | 38.0% | 1.3% |
+| 32 | 148 | 1,393 | 48.3% | 1.5% |
+
+The ragged batch reaches roughly a third of its same width control at B=8
+and a tenth at B=32.
 
 Two things are being paid for at once, and only one of them is the padding. A
 padded batch also computes differently: telling the model which positions are

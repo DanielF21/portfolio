@@ -8,7 +8,7 @@ result: "Attention at true lengths over a block pool."
 code: "https://github.com/DanielF21/inference/tree/main/infer/engines/paged"
 ---
 
-Part 4's engine re-formed the batch every step but computed every row's
+Part 4's engine re formed the batch every step but computed every row's
 attention across the batch's widest row, and that held it at 1.25 requests
 per second however fast requests arrived. This part stores KV in fixed size
 blocks and gives the decode kernel each row's true length. **The engine now
@@ -68,7 +68,7 @@ in any of the parity checks.
 
 ## What I expected
 
-Part 4 recorded this prediction, quoted in full:
+Part 4 recorded this prediction:
 
 > Uniform batches of 32 decode at 1,264 to 1,400 tokens per second at every
 > prompt length from 256 to 4096, so attention over true lengths at batch

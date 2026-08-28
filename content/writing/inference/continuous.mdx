@@ -3,7 +3,7 @@ title: "Continuous batching"
 publishedAt: "2026-08-24"
 series: "inference"
 part: 4
-summary: "The batch is re-formed every step. Median queue wait at 1 request per second falls from 75.5 s to 0.02 s, and capacity reaches 1.25 req/s, held there by the cost of the longest prompt in the batch."
+summary: "The batch is re formed every step. Median queue wait at 1 request per second falls from 75.5 s to 0.02 s, and capacity reaches 1.25 req/s, held there by the cost of the longest prompt in the batch."
 result: "Batch membership decided every step."
 code: "https://github.com/DanielF21/inference/tree/main/infer/engines/continuous"
 ---
@@ -65,7 +65,7 @@ forced through 4 slots. All match exactly.
 
 ## What I expected
 
-Part 3 recorded this prediction, quoted in full:
+Part 3 recorded this prediction:
 
 > The mixed stream generates 158 tokens per request on average, so 1 request
 > per second needs roughly 158 tokens/s of decode, which this part's engine
