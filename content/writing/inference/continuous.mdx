@@ -22,11 +22,11 @@ at 1 request per second would fall below 1 second, time to first token at
 that rate would fall below 2 seconds at the 95th percentile, and the engine
 would sustain between 2 and 4 requests per second. The first two held, at
 0.02 and 0.34 seconds. The third missed: measured capacity is 1.25 requests
-per second. A later section locates the missing capacity. In short, removing
-finished requests from the batch turned out to be the smaller half of the
-win the prediction assumed. The larger half needs a different cache, because
-when one 4096 token prompt is anywhere in the batch, every request's
-attention is computed as if its own context were that long.
+per second. A later section locates the missing capacity. Removing finished
+requests from the batch bought less than the prediction assumed. The rest of
+the predicted capacity needs a different cache, because when one 4096 token
+prompt is anywhere in the batch, every request's attention is computed as if
+its own context were that long.
 
 ## What changed
 
@@ -103,9 +103,9 @@ requests arriving at the same moments. Waiting is measured from arrival.
 | rate | queue p50 | queue p95 | TTFT p95 | achieved rate | static achieved | static queue p50 |
 |---|---|---|---|---|---|---|
 | 1/s | 0.02 s | 0.06 s | 0.34 s | 0.94/s | 0.65/s | 75.5 s |
-| 2/s | 37.2 s | 87.0 s | 87.2 s | 1.26/s | | |
+| 2/s | 37.2 s | 87.0 s | 87.2 s | 1.26/s | not run | not run |
 | 3/s | 73.4 s | 157.2 s | 157.4 s | 1.24/s | 0.66/s | 204.0 s |
-| 4/s | 89.3 s | 188.0 s | 188.2 s | 1.24/s | | |
+| 4/s | 89.3 s | 188.0 s | 188.2 s | 1.24/s | not run | not run |
 | 5/s | 103.1 s | 218.3 s | 218.5 s | 1.19/s | 0.66/s | 236.8 s |
 | 7/s | 126.6 s | 254.7 s | 255.1 s | 1.14/s | 0.67/s | 255.8 s |
 
@@ -118,18 +118,19 @@ achieved rate pins at 1.14 to 1.26 whatever is asked, which is what a
 capacity of about 1.25 requests per second looks like from the outside. The
 static engine pinned at 0.66 on the same traces.
 
-The step from rate 1 to rate 2 is the whole story of the chart: below
-capacity the queue is two hundredths of a second, above it the queue is
-minutes. A serving system does not degrade gracefully past its capacity, it
-switches regimes.
+The step from rate 1 to rate 2 is the one to read. Below capacity the median
+queue wait is 0.02 s. One request per second above it, the median is 37.2 s, a
+factor of 1,860 for a 2x change in arrival rate. Past capacity the wait is set
+by how long the queue has been growing rather than by how long the work takes.
 
-## Where the other half of the predicted capacity went
+## Where the missing capacity went
 
-At saturation the engine produces 195 to 198 tokens per second of output.
-Two costs, both measured in this part's runs, account for the gap between
-that and the prediction's hoped for 300 to 600.
+At saturation the engine produces 195 to 198 tokens per second of output. The
+predicted 2 to 4 requests per second would have needed 300 to 600, at the 158
+tokens per request the draw generates. Two costs, both measured in this part's
+runs, account for the gap.
 
-**Width.** The closed controls ran the same seeded 32 request mixed draw
+Width. The closed controls ran the same seeded 32 request mixed draw
 Part 3 ran. This engine finishes it in 34.3 s against the static engine's
 46.9, 27% faster, entirely from evicting finished rows. But 34.3 s for
 5,440 tokens is still only 158 tokens per second, against 1,264 for a
@@ -139,7 +140,7 @@ computed across that span for all 32 rows. Eviction cannot fix this. The
 cache stores each row's real tokens only, but the computation is still
 shaped by the widest member.
 
-**Prefill share.** At 1.25 admissions per second, with the draw's mean
+Prefill share. At 1.25 admissions per second, with the draw's mean
 prompt of about 1,100 tokens, the engine runs roughly 1,375 prompt tokens of
 prefill per second. Measured inside the disturbance run below, a 4096 token
 prefill in a running batch costs about 0.69 s, which is 5,900 prompt tokens
@@ -154,19 +155,27 @@ through 8 slots, with per token timing kept for every request. A slot frees,
 a newcomer's prefill runs inside the step, and every running row's next
 token waits for it.
 
-The baseline gap between an incumbent's tokens is 46.2 ms. The run contains
-12 distinct steps where the gap spiked past three times that, and the spike
-sizes group by what was admitted: around 300 ms when 1024 token prompts
-joined, 685 to 692 ms for each 4096 token prompt, 973 ms at the worst. **A
-running request's inter token latency is 46 ms until a 4096 token prompt
+The baseline gap between an incumbent's tokens is 46.2 ms. The run contains 12
+distinct steps where the gap spiked past three times that, and the spike sizes
+group by what was admitted.
+
+| what was admitted | gap in that step |
+|---|---|
+| nothing, baseline | 46.2 ms |
+| a 1024 token prompt | about 300 ms |
+| a 4096 token prompt | 685 to 692 ms |
+| the worst step in the run | 973 ms |
+
+**A running request's inter token latency is 46 ms until a 4096 token prompt
 joins its batch, and 690 ms, 15x, in the step that admits one.**
 
 This is the tradeoff this part bought. Part 3 traded throughput against time
-to first token on one knob. Here the newcomer's wait is traded against the
-incumbents' latency: the same prefill that gives an arriving request its
-0.34 s TTFT is the spike inside someone else's stream. Nothing in this
-engine bounds that spike, and the standard fix, splitting a long prefill
-into chunks so decode steps interleave, is a later part's variable.
+to first token, and raising the batch size moved both. Here the newcomer's
+wait is traded against the incumbents' latency: the same prefill that gives an
+arriving request its 0.34 s TTFT is the spike inside someone else's stream.
+Nothing in this engine bounds that spike. The standard fix is to split a long
+prefill into fixed size chunks so decode steps run between them, and this part
+did not build it.
 
 ## What the machinery costs when it buys nothing
 
@@ -246,8 +255,8 @@ uv run modal run modal_app.py::arrivals --engine continuous \
 ```
 
 Greedy decoding, seed 0, 2 warmup and 5 recorded runs per closed
-configuration. Raw rows are in the repo under `results/continuous/`, one row per request
-with its own timing, plus the arrival records beside them.
+configuration. Raw rows are in the repo under `results/continuous/`, one row
+per request with its own timing, plus the arrival records beside them.
 The disturbance numbers come from the per token times recorded for the 64
 request configuration. Token parity against the cached engine was checked
 at batch 1, uniform batch 4, a mixed batch, and 8 requests queued through 4

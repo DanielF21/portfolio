@@ -51,8 +51,62 @@ gap inverted.
 Nothing else moved: same model, same precision, same GPU, same prompts, same
 sampling, same seed, same run counts.
 
-**Setup:** Qwen2.5-1.5B in fp16, one NVIDIA A10, greedy decoding from seed 0,
+Setup: Qwen2.5-1.5B in fp16, one NVIDIA A10, greedy decoding from seed 0,
 256 new tokens per run, five recorded runs after two warmup runs, batch size 1.
+
+## What I expected, and why the prediction missed low
+
+Part 1 ended with this:
+
+> A cached step has about 5.15 ms of GPU work against a 19.32 ms host floor.
+> Step time is the larger of the two, since the CPU runs ahead of the GPU, so
+> the cache should land at **19.3 ms per step, about 52 tok/s, flat across
+> every prompt length**, and not at the 194 tok/s the bandwidth alone would
+> allow.
+
+The prediction made two claims. It called decode flat across every prompt
+length, and decode is flat. It called the rate 52 tok/s, and the measurement is
+44.05 to 46.21, low by 12 to 15% at every prompt length.
+
+| prompt | predicted | measured | predicted speedup | measured speedup |
+|---|---|---|---|---|
+| p16 | ~52 tok/s | 44.05 | ~1.1x | 0.96x |
+| p64 | ~52 | 45.70 | ~1.2x | 1.01x |
+| p256 | ~52 | 46.21 | ~1.5x | 1.32x |
+| p1024 | ~52 | 45.67 | ~3.8x | 3.34x |
+| p4096 | ~52 | 45.80 | ~14x | 12.73x |
+
+![Predicted decode throughput against measured](/figures/inference/cached-prediction.png)
+
+The dashed line is the prediction, flat at 52 tok/s. The measured line is flat
+too, and sits under it at every prompt length.
+
+A prediction that misses by a consistent amount is more useful than one that
+misses randomly, because a single wrong term can account for all of it.
+
+**That term is the floor, Part 1's measurement of what one forward pass costs
+before the GPU does any useful work. Its 19.32 ms was measured on a pass with
+no cache attached, and this engine does not run that pass.**
+
+Holding a cache adds work to every forward, and all of it lands on the host,
+the CPU side of the program, rather than the GPU. Each of the 28 layers now
+writes a key and a value into the buffer, and each one is routed through the
+cache to do it. Every step also reads back how long the sequence is, so that
+positional encoding lands in the right place, and asks the cache for the sizes
+the attention mask needs. None of that existed in the pass the floor was
+measured on.
+
+This engine spends 21.6 to 22.7 ms per step against that 19.32 ms floor, a gap
+of 2.3 to 3.4 ms, and the bookkeeping is what sits in it. I did not time the
+pieces separately, so that accounts for the gap rather than proving it.
+
+The 19.32 ms measurement was correct for the engine it was made on, and wrong
+to apply to an engine that adds work to the same path. A floor measured on one
+engine does not carry to the next one.
+
+p16 was the prediction's closest call, at a predicted 1.1x against a measured
+0.96x, and it still missed in the same direction. The cache made p16 3.5%
+slower rather than roughly break even.
 
 ## Results
 
@@ -126,25 +180,23 @@ says which of the two resources limits the work.
 
 | prompt | Part 1 MFU | Part 1 MBU | Part 2 MFU | Part 2 MBU |
 |---|---|---|---|---|
-| 16 | 13.8% | 23.5% | 0.1% | 22.7% |
-| 64 | 18.3% | 23.3% | 0.1% | 23.6% |
-| 256 | 28.6% | 18.1% | 0.2% | 23.9% |
-| 1024 | 34.3% | 7.0% | 0.5% | 23.8% |
-| 4096 | 36.3% | 1.9% | 1.8% | 24.5% |
+| p16 | 13.8% | 23.5% | 0.1% | 22.7% |
+| p64 | 18.3% | 23.3% | 0.1% | 23.6% |
+| p256 | 28.6% | 18.1% | 0.2% | 23.9% |
+| p1024 | 34.3% | 7.0% | 0.5% | 23.8% |
+| p4096 | 36.3% | 1.9% | 1.8% | 24.5% |
 
 **The two engines move in opposite directions as context grows.** Part 1 climbs
 from 13.8% to 36.3% of peak compute while falling from 23.5% to 1.9% of peak
 bandwidth. This one holds bandwidth between 22.7% and 24.5% at every prompt
-length and never gets above 1.8% of peak compute. Part 0's claim that prefill
-and decode sit on opposite sides of the roofline now has measurements under it.
+length and never gets above 1.8% of peak compute. The series introduction
+claims that prefill and decode sit on opposite sides of the roofline, and that
+claim now has measurements under it.
 
 MFU collapsing to 1.8% while throughput rises 12.7x looks contradictory and is
-not. MFU rewards doing arithmetic, and this engine deletes almost all of it:
-
-```
-Part 1 at p4096   3226.6 TF
-Part 2 at p4096     13.2 TF     a factor of 244
-```
+not. MFU rewards doing arithmetic, and this engine deletes almost all of it. At
+p4096 Part 1 performs 3226.5 TF of arithmetic and this engine performs 13.2 TF,
+a factor of 244.
 
 Part 1 derived a 248x ratio of token forwards from the architecture alone.
 This is 244x, close but not the same number, and the gap is worth naming. A
@@ -173,8 +225,8 @@ Nothing here watches actual DRAM traffic.
 | p1024 | 3036.0 MiB | 3054.4 MiB | +18.5 | 35.0 MiB | 16.5 MiB |
 | p4096 | 3231.3 MiB | 3332.5 MiB | +101.1 | 119.0 MiB | 17.9 MiB |
 
-`cache size` is `(P + 256) x 28 KiB`, from the per token arithmetic in
-[Part 0](/writing/inference).
+`cache size` is `(P + 256) x 28 KiB`, from the per token arithmetic in [the
+series introduction](/writing/inference).
 
 **Holding a cache is cheaper than not holding one at short prompts and more
 expensive at long ones, crossing over between 256 and 1024 tokens.** Two
@@ -196,14 +248,15 @@ traffic, because every one of those bytes has to be read again on every step.
 Bandwidth is the number that means something for decode, and it says the same
 thing at every prompt length. Every decode step reads the weights once, 3.09
 GB, plus the cache in full, which runs from 7.8 MB at p16 to 125 MB at p4096.
-Against 600 GB/s that is 5.16 ms of traffic at the shortest prompt and 5.36 ms
+Against 600 GB/s that is 5.15 ms of traffic at the shortest prompt and 5.36 ms
 at the longest, inside a step of about 22 ms either way.
 
 ![Where a decode step goes](/figures/inference/cached-step-budget.png)
 
 **About 76% of every step is the GPU waiting for the host, the CPU side of
-the program, to hand it the next instruction.** Not waiting for memory, and certainly not computing: 1.8% of peak
-compute and 24.5% of peak bandwidth, inside a step that is three quarters idle.
+the program, to hand it the next instruction.** It is not waiting for memory
+and it is not computing: 1.8% of peak compute and 24.5% of peak bandwidth,
+inside a step that is three quarters idle.
 
 The same fraction appears from two directions. 5.15 ms of weight traffic inside a 21.8 ms step is 23.6%, and
 45.80 tok/s against the 194 tok/s ceiling the bandwidth allows is also 23.6%.
@@ -284,7 +337,7 @@ through it. **Aggregate throughput should be roughly `B x 45.5 tok/s`, close to
 linear.**
 
 It should stop being linear when the memory traffic per step catches up with
-the 22 ms budget. At 600 GB/s a 22 ms step can move 13.2 GB; the weights take
+the 22 ms budget. At 600 GB/s a 22 ms step can move 13.2 GB. The weights take
 3.09 GB of that, leaving about 10.1 GB for the cache, which is roughly 353,000
 token positions at 28 KiB each. **That is the wall, and at 512 token sequences
 it is around batch 690.**
@@ -296,7 +349,7 @@ That is a property of pairing a 1.5B model with a 24 GB card rather than
 anything an engine does, and it means memory management has nothing to show
 for itself unless the pool is capped deliberately. A 2 GiB cap holds 74,898
 positions and makes capacity bind first with a 4.7x margin. [The sizing is in
-Part 0's appendix](/writing/inference/arithmetic).
+the memory arithmetic](/writing/inference/arithmetic).
 
 ## Reproducing this
 

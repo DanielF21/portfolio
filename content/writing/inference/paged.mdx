@@ -14,7 +14,7 @@ per second however fast requests arrived. This part stores KV in fixed size
 blocks and gives the decode kernel each row's true length. **The engine now
 serves 3 requests per second with the median request waiting 0.02 seconds,
 where Part 4's engine at the same arrival rate was saturated and the median
-request waited 73 seconds.** The queue starts growing between 3 and 4
+request waited 73.4 seconds.** The queue starts growing between 3 and 4
 requests per second, and Part 4's recorded prediction of 2.5 to 3.5
 sustained lands inside that window. The cost shows on uniform batches,
 where true lengths cannot help and the new kernel runs 28 to 30% slower
@@ -62,9 +62,9 @@ through a debug path that reads the same blocks with Part 4's kernel:
 single requests, a uniform batch, a mixed batch, and 8 requests queued
 through 4 slots all match exactly. The new kernel was then checked against
 that debug path on the same workloads. Its outputs differ from the old
-kernel's by about 10^-3 in fp16, enough in principle to flip a greedy
-argmax where the top two logits nearly tie, but across all 19 gate
-requests not one token flipped.
+kernel's by about one part in a thousand in fp16, enough in principle to flip
+a greedy argmax where the top two logits nearly tie, but not one token flipped
+in any of the parity checks.
 
 ## What I expected
 
@@ -113,11 +113,11 @@ completion.
 | rate | queue p50 | queue p95 | TTFT p95 | served/s | Part 4 served/s | Part 4 queue p50 |
 |---|---|---|---|---|---|---|
 | 1/s | 0.02 s | 0.03 s | 0.30 s | 0.94/s | 0.94/s | 0.02 s |
-| 2/s | 0.02 s | 0.09 s | 0.32 s | 1.85/s | 1.26/s | 36.9 s |
-| 3/s | 0.02 s | 1.05 s | 2.65 s | 2.72/s | 1.24/s | 73.2 s |
-| 4/s | 2.53 s | 4.21 s | 4.48 s | 3.45/s | 1.24/s | 89.2 s |
-| 5/s | 4.30 s | 10.9 s | 11.0 s | 3.90/s | 1.19/s | 103.0 s |
-| 7/s | 40.0 s | 67.9 s | 68.1 s | 2.90/s | 1.14/s | 126.5 s |
+| 2/s | 0.02 s | 0.09 s | 0.32 s | 1.85/s | 1.26/s | 37.2 s |
+| 3/s | 0.02 s | 1.05 s | 2.65 s | 2.72/s | 1.24/s | 73.4 s |
+| 4/s | 2.53 s | 4.21 s | 4.48 s | 3.45/s | 1.24/s | 89.3 s |
+| 5/s | 4.30 s | 10.9 s | 11.0 s | 3.90/s | 1.19/s | 103.1 s |
+| 7/s | 40.0 s | 67.9 s | 68.1 s | 2.90/s | 1.14/s | 126.6 s |
 
 ![Median queue wait against arrival rate, three engines](/figures/inference/paged-arrivals.png)
 
@@ -186,10 +186,10 @@ cost follows group size: pad a 16 token prompt into a group whose widest
 member is 4096 tokens and the prefill spends 256 positions of work per
 useful token on that row. Summed over each group, the median group at rate
 7 wastes 0.60 padded positions per real prompt token and the 95th
-percentile group wastes 2.82, against 0.00 at the median for rate 4.
-Deeper queues make bigger groups, bigger groups make more padding, more
-padding makes slower prefill, and slower prefill deepens the queue. The
-service rate at rate 7 is the equilibrium of that loop.
+percentile group wastes 2.82, against 0.00 at the median for rate 4. That
+feeds back on itself: a deeper queue produces a larger admission group, a
+larger group pads more, and the slower prefill that results lets the queue
+grow further. The service rate at rate 7 is where that settles.
 
 ## What admission costs the rows already running
 
@@ -268,10 +268,12 @@ them at 1.8 to 2.1 ms per step. At this part's 29.8 ms steps that is
 about 7%, a larger fraction than Part 4's, and published numbers are
 again left unadjusted.
 
-Three benchmark containers drew an A10G from the cloud provider's A10
-pool, the same substitution that contaminated a Part 3 sweep. Two full
-runs were discarded after their device name column gave them away, and
-every kept number in this file is from a verified A10.
+Three benchmark containers drew an A10G rather than an A10 from the cloud
+provider, which is a faster card and would have flattered these numbers. Two
+full runs were discarded after the device name recorded with each run gave
+them away, and every kept number in this file is from a verified A10. The same
+substitution reached one sweep earlier in the series, which is why the device
+name is now recorded and checked.
 
 ## Bottleneck, and what follows
 
@@ -292,8 +294,9 @@ interleave between chunks instead of stalling for the whole prompt.
 ## Prediction, recorded before building the chunked prefill engine
 
 Removing prefill padding cuts the closed 32 row prefill from 131,072
-positions to 44,048, so the closed mixed run should drop from 18.0 s to
-about 12 s, near 10.31 x (44,048 / 131,072) + 7.7. At arrival rates past
+positions to 44,048, so the closed mixed run should drop from 18.0 s to about
+12 s: the 10.31 s prefill scaled by 44,048 / 131,072, plus the 7.7 s of decode
+that follows it unchanged. At arrival rates past
 capacity the same removal deletes the padding loop that pulls service from
 3.90 down to 2.90 per second, so the served rate should hold near its
 peak at every rate from 4 through 7 rather than sagging. **I expect the
@@ -320,8 +323,9 @@ uv run modal run modal_app.py::arrivals --engine paged --rates 3,2 --n-requests 
 
 Greedy decoding, seed 0, 2 warmup and 5 recorded runs per closed
 configuration. Raw rows are in the repo under `results/paged/`, one row
-per request with its own timing, plus the arrival records beside them. The disturbance numbers come from the per token times in the jsonl
-for the 64 request configuration, and the admission group statistics come
+per request with its own timing, plus the arrival records beside them. The
+disturbance numbers come from the per token times recorded for the 64 request
+configuration, and the admission group statistics come
 from the admission step index recorded per request in `arrivals.csv`. The
 gate script checks token parity against the Part 2 and Part 4 engines on
 the laptop before anything runs remotely. The first command in the modal

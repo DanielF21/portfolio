@@ -123,8 +123,11 @@ after their length, so p4096 is the 4096 token one.
 
 Each run generates **256 new tokens**, greedy, from a fixed seed. The output is
 deterministic, so any two engines can be checked for producing identical text.
-Every number reported in a part is the mean or median of **five recorded runs
-after two warmup runs**, at batch size 1.
+A closed run, one where the whole workload is handed to the engine at once, is
+reported as the mean or median of **five recorded runs after two warmup
+runs**. The first two parts run at batch size 1 throughout. Later parts add
+batching, and they also report open runs, where requests arrive over time and
+one pass over the arrival trace is the measurement.
 
 ## The only variable
 

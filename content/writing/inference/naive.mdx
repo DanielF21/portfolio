@@ -23,7 +23,7 @@ to first token: the wait before anything appears. Every pass after it is a
 between one token and the next.
 
 **This engine generates 45.66 tokens/s on a 16 token prompt and 3.60 tokens/s
-on a 4096 token prompt which is 12.7 times slower.** The length of the prompt causes all of
+on a 4096 token prompt, which is 12.7 times slower.** The length of the prompt causes all of
 it. Nothing the engine generates along the way contributes.
 
 Every step reprocesses the whole sequence
@@ -41,9 +41,9 @@ runs on the last position only, not on every position in the sequence. Only
 the last position can produce the next token, so every other one would be
 discarded anyway. This matters more than it sounds like it should. Projecting
 all 4096 positions into a 151,936 word vocabulary costs 1.9 TFLOP per pass,
-against 0.0005 TFLOPS for a single position.
+against 0.0005 TFLOP for a single position.
 
-**Setup:** Qwen2.5-1.5B in fp16, one NVIDIA A10, greedy decoding from seed 0,
+Setup: Qwen2.5-1.5B in fp16, one NVIDIA A10, greedy decoding from seed 0,
 256 new tokens per run, five recorded runs after two warmup runs, batch size 1.
 
 ## Results
@@ -78,10 +78,10 @@ Run to run variance is small at the long prompts and not at the short ones. The
 five runs at p4096 span 71.126 to 71.185 s, a spread of 0.08%. The five at p16
 span 3.5%, because the same few milliseconds of jitter is a larger fraction of
 a 5.6 second run. All five runs of a given prompt produce byte identical
-output. This is due to our sampling strategy: greedy decoding. Greedy decoding is deterministic because
-it samples the largest logit at every step given the same prompt and model state.
+output. The sampling is greedy, which takes the largest logit at every step,
+so the same prompt and the same model state give the same token every time.
 
-## The floor underneath everything
+## The floor every step sits on
 
 The flat left half of that chart is the first thing to explain, and it is not
 about this engine at all. It is a floor: the time one forward pass takes no
@@ -214,8 +214,8 @@ tokens for a model this small. The feed forward layers are still the bulk of
 the work, but that trend is the reason attention kernels matter at long
 context.
 
-36.3% of an A10 is a respectable number. The next section is about what that
-36.3% was busy doing.
+36.3% of the A10's 125 TFLOPS is the highest score anywhere in this part. The
+next section is about what that 36.3% was busy doing.
 
 ## What that efficiency was actually doing
 
@@ -234,13 +234,12 @@ token's key and value are computed they can never change again. This engine
 throws them away at the end of every step and derives them again, 255 more
 times.
 
-**So the best MFU score in this part belongs to its worst behaviour.** The
-engine hits 36.3% of peak precisely where 99.6% of the work it is
-performing does not need to happen, and it scores 13.8% where it is doing the
-least wasted work of any configuration here. A utilization metric rewards
-keeping the machine busy, and it cannot tell useful work from recomputation.
-The number is accurate. On its own it was the wrong metric to judge this
-engine by.
+**The engine hits its best MFU, 36.3% of peak, precisely where 99.6% of the
+work it is performing does not need to happen.** It scores its worst, 13.8%,
+where it is doing the least wasted work of any configuration here. A
+utilization metric rewards keeping the machine busy, and it cannot tell useful
+work from recomputation. The number is accurate. On its own it was the wrong
+metric to judge this engine by.
 
 ## Caveats
 
