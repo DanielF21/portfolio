@@ -233,7 +233,7 @@ iteration, and the stop at the end where the host reads the sampled
 tokens back. Production engines remove most of this by recording the
 decode step's GPU work once and replaying it every step.
 
-## Prediction, recorded before building the next engine
+## Prediction
 
 Whatever mechanism the next part uses, its measure is the median decode step,
 31 ms here. **If the next engine lands the step at 15 ms on this workload,
