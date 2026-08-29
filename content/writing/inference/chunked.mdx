@@ -43,19 +43,18 @@ about one chunk of work. A request's first token is sampled at its final
 prompt position, in whichever step its last chunk runs.
 
 Decode is untouched from Part 5: one query row per running request, each
-row reading only its own blocks through the block tables. Each step
-therefore runs up to two forwards, one packed prefill forward when chunks
-are scheduled and one per row decode forward when any request is decoding.
-The attention kernel is what forces the separation: it tiles the query
-dimension in blocks of 32, so decode tokens packed
-into the prefill's query sequence would all land in one tile, whose block
-list is the union of every request's blocks, and the kernel walks that
-union serially. On identical cache state, one attention call over 32
-decode tokens costs 0.347 ms with the tokens as separate rows and
-1.749 ms with them packed together, 5.04x. The model makes that call
-once per layer, so packing would add (1.749 - 0.347) x 28, about 39 ms,
-to every decode step. Keeping decode in its own forward keeps each
-request in its own tile.
+row reading only its own blocks. Each step therefore runs up to two
+forwards, a packed prefill forward when chunks are scheduled and a per row
+decode forward when anything is decoding. The attention kernel forces that
+separation. It tiles the query dimension in blocks of 32, so decode tokens
+packed into the prefill's query sequence land in one tile whose block list
+is the union of every request's blocks, and the kernel walks that union
+serially. On identical cache state one attention call over 32 decode
+tokens costs 0.347 ms as separate rows and 1.749 ms packed, 5.04x, and the
+model makes that call once per layer, so packing would add about 39 ms to
+every decode step.
+
+![One scheduling step in Part 6](/figures/inference/chunked-steps.png)
 
 Everything else carries over from Part 5 unchanged: the block pool with
 reserve on admit, strict first come first served admission with head of
@@ -264,6 +263,7 @@ uv run modal run modal_app.py::arrivals --engine chunked --rates 2 --n-requests 
 
 uv run python scripts/plot_arrivals.py
 uv run python scripts/plot_chunked.py
+uv run python scripts/plot_steps.py
 ```
 
 Greedy decoding, seed 0, Qwen2.5 1.5B fp16, Modal A10. Raw rows land in
