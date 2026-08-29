@@ -45,7 +45,7 @@ export function ThingStage({ thing }: { thing: Thing }) {
       <div className="relative overflow-hidden rounded-2xl border">
         <Image
           src={thing.poster.src}
-          alt=""
+          alt={thing.poster.alt}
           width={thing.poster.width}
           height={thing.poster.height}
           priority

@@ -1,6 +1,7 @@
 ---
 title: "One forward per step"
 publishedAt: "2026-08-28"
+description: "Part 7: one model forward per scheduling step, attention split by kind inside it. Sustained service rises from 4.08 to 4.53 req/s, the worst stall to 69 ms."
 series: "inference"
 part: 7
 summary: "One model forward per scheduling step, with attention split by kind inside the call. Sustained service rises from 4.08 to 4.53 req/s, median queue wait at 5 arrivals per second falls from 3.9 s to 1.4 s, and the worst stall drops to 69 ms."

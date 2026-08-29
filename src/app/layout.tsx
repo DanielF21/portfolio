@@ -3,6 +3,7 @@ import { SiteHeader } from "@/components/layout/site-header"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { SITE } from "@/data/site";
+import { absoluteUrl, FEED_PATH } from "@/lib/seo";
 import { cn } from "@/lib/utils"
 import type { Metadata } from "next"
 import {
@@ -44,6 +45,22 @@ export const metadata: Metadata = {
     template: `%s | ${SITE.name}`,
   },
   description: SITE.description,
+  /**
+   * The DEFAULTS only. Every page sets its own canonical through
+   * `lib/seo.ts#pageMetadata`, and a child's `alternates` REPLACES this object
+   * rather than merging into it, so the feed link has to be repeated there. It
+   * is not inherited, whatever the shape of this file suggests.
+   *
+   * There is deliberately no `canonical` here: an inherited one would make
+   * every page that forgot to set its own claim to be the home page.
+   */
+  alternates: {
+    types: {
+      "application/rss+xml": [
+        { url: absoluteUrl(FEED_PATH), title: `${SITE.name}: writing` },
+      ],
+    },
+  },
   openGraph: {
     title: SITE.name,
     description: SITE.description,
@@ -67,10 +84,9 @@ export const metadata: Metadata = {
     title: SITE.name,
     card: "summary_large_image",
   },
-  verification: {
-    google: "",
-    yandex: "",
-  },
+  // No `verification` block. It held `google: ""` and `yandex: ""`, which are
+  // placeholders, not tokens. Add the real string from Google Search Console
+  // here when the property is verified; an empty one verifies nothing.
 }
 
 export default function RootLayout({

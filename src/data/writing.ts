@@ -218,6 +218,12 @@ export async function neighbours(seriesSlug: string, partSlug: string) {
   };
 }
 
+/** When a document last changed: its revision date if it has been revised,
+ *  otherwise the day it was published. Never the build date. */
+export function lastChanged(doc: DocSummary): string {
+  return doc.metadata.updatedAt ?? doc.metadata.publishedAt;
+}
+
 /** Everything with a URL under /writing. For the sitemap. */
 export async function writingUrls() {
   const [singles, series] = await Promise.all([oneOffs(), allSeries()]);
@@ -225,14 +231,47 @@ export async function writingUrls() {
   return [
     ...singles.map((d) => ({
       url: `/writing/${d.slug}`,
-      lastModified: d.metadata.publishedAt,
+      lastModified: lastChanged(d),
     })),
     ...series.flatMap((s) => [
-      { url: `/writing/${s.series.slug}`, lastModified: s.latest },
+      {
+        url: `/writing/${s.series.slug}`,
+        // A hub changes when any of its documents does, appendices included:
+        // the hub lists them, so a revised appendix changes the hub's page.
+        lastModified: [...s.parts, ...s.appendices]
+          .map(lastChanged)
+          .reduce((a, b) => (b > a ? b : a), s.latest),
+      },
       ...[...s.parts, ...s.appendices].map((p) => ({
         url: `/writing/${s.series.slug}/${p.slug}`,
-        lastModified: p.metadata.publishedAt,
+        lastModified: lastChanged(p),
       })),
     ]),
   ];
+}
+
+/**
+ * The most recent date on any piece of writing.
+ *
+ * The `/writing` index and the home page both list writing and nothing else
+ * about them changes on its own, so this is honestly their `lastmod`. The
+ * alternative the sitemap used to run, `new Date()`, told crawlers all four
+ * static routes changed on every deploy.
+ */
+export async function latestWritingDate(): Promise<string> {
+  const urls = await writingUrls();
+  return urls.reduce((a, u) => (u.lastModified > a ? u.lastModified : a), "");
+}
+
+/** Every part and appendix of every series, hubs first, in reading order.
+ *  What `/llms-full.txt` concatenates. */
+export async function readingOrder(): Promise<
+  { series: Series; hub: boolean; doc?: Part }[]
+> {
+  const series = await allSeries();
+  return series.flatMap((s) => [
+    { series: s.series, hub: true },
+    ...s.parts.map((doc) => ({ series: s.series, hub: false, doc })),
+    ...s.appendices.map((doc) => ({ series: s.series, hub: false, doc })),
+  ]);
 }

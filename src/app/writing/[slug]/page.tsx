@@ -2,18 +2,27 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { JsonLd } from "@/components/json-ld";
 import { Container } from "@/components/layout/container";
 import { ArticleBody } from "@/components/writing/article-body";
 import { SeriesHub } from "@/components/writing/series-hub";
-import { blurbText, SERIES, seriesBySlug } from "@/data/series";
+import { SERIES, seriesBySlug } from "@/data/series";
 import { SITE } from "@/data/site";
 import {
   getOneOff,
   getSeriesIntro,
+  lastChanged,
   oneOffs,
   seriesAppendices,
   seriesParts,
 } from "@/data/writing";
+import {
+  blogPostingSchema,
+  breadcrumbSchema,
+  graph,
+  seriesSchema,
+} from "@/lib/schema";
+import { pageMetadata } from "@/lib/seo";
 import { formatDate } from "@/lib/utils";
 
 /**
@@ -46,53 +55,31 @@ export async function generateMetadata({
   const series = seriesBySlug(params.slug);
 
   if (series) {
-    const url = `${SITE.url}/writing/${series.slug}`;
-    // Metadata cannot hold markup, so the blurb goes in flat.
-    const description = blurbText(series.blurb);
-    return {
+    return pageMetadata({
+      path: `/writing/${series.slug}`,
       title: series.title,
-      description,
-      alternates: { canonical: url },
+      // The registry's `description`, not `blurbText(blurb)`. The blurb is
+      // display prose written to sit beside the title; this one is written to
+      // the length a search result shows and names the model and the hardware.
+      description: series.description,
       // A hub is an index, not an article.
-      openGraph: {
-        title: series.title,
-        description,
-        type: "website",
-        url,
-      },
-      twitter: {
-        card: "summary",
-        title: series.title,
-        description,
-      },
-    };
+      type: "website",
+    });
   }
 
   const post = await getOneOff(params.slug);
   if (!post) return {};
 
-  const { title, publishedAt, summary, image } = post.metadata;
-  return {
+  const { title, publishedAt, summary, description, image } = post.metadata;
+  return pageMetadata({
+    path: `/writing/${post.slug}`,
     title,
-    description: summary,
-    alternates: { canonical: `${SITE.url}/writing/${post.slug}` },
-    openGraph: {
-      title,
-      description: summary,
-      type: "article",
-      publishedTime: publishedAt,
-      url: `${SITE.url}/writing/${post.slug}`,
-      // No fallback to a /og route: there isn't one, which is why every article
-      // on the old site had a broken share image.
-      ...(image ? { images: [{ url: image }] } : {}),
-    },
-    twitter: {
-      card: image ? "summary_large_image" : "summary",
-      title,
-      description: summary,
-      ...(image ? { images: [image] } : {}),
-    },
-  };
+    description: description ?? summary ?? SITE.description,
+    type: "article",
+    publishedTime: publishedAt,
+    modifiedTime: lastChanged(post),
+    ...(image ? { images: [image] } : {}),
+  });
 }
 
 export default async function WritingSlugPage({
@@ -110,13 +97,25 @@ export default async function WritingSlugPage({
     ]);
 
     return (
-      <SeriesHub
-        series={series}
-        parts={parts}
-        appendices={appendices}
-        latest={parts[0]?.metadata.publishedAt ?? series.started}
-        intro={intro}
-      />
+      <>
+        <JsonLd
+          json={graph(
+            seriesSchema(series, parts),
+            breadcrumbSchema([
+              { name: "Daniel Fleming", path: "/" },
+              { name: "Writing", path: "/writing" },
+              { name: series.title, path: `/writing/${series.slug}` },
+            ])
+          )}
+        />
+        <SeriesHub
+          series={series}
+          parts={parts}
+          appendices={appendices}
+          latest={parts[0]?.metadata.publishedAt ?? series.started}
+          intro={intro}
+        />
+      </>
     );
   }
 
@@ -127,24 +126,19 @@ export default async function WritingSlugPage({
 
   return (
     <Container as="article" width="page" className="py-block">
-      <script
-        type="application/ld+json"
-        suppressHydrationWarning
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "BlogPosting",
-            headline: post.metadata.title,
-            datePublished: post.metadata.publishedAt,
-            dateModified: post.metadata.publishedAt,
-            description: post.metadata.summary,
-            ...(post.metadata.image
-              ? { image: `${SITE.url}${post.metadata.image}` }
-              : {}),
-            url: `${SITE.url}/writing/${post.slug}`,
-            author: { "@type": "Person", name: SITE.name },
+      <JsonLd
+        json={graph(
+          blogPostingSchema({
+            doc: post,
+            path: `/writing/${post.slug}`,
+            section: "Writing",
           }),
-        }}
+          breadcrumbSchema([
+            { name: "Daniel Fleming", path: "/" },
+            { name: "Writing", path: "/writing" },
+            { name: post.metadata.title, path: `/writing/${post.slug}` },
+          ])
+        )}
       />
 
       <header className="max-w-measure">

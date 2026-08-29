@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { JsonLd } from "@/components/json-ld";
 import { Container } from "@/components/layout/container";
 import { ThingStage } from "@/components/things/thing-stage";
 import { getThingNotes } from "@/data/mdx";
 import { hueStyle, THINGS, thingBySlug } from "@/data/things";
+import { breadcrumbSchema, graph, thingSchema } from "@/lib/schema";
+import { pageMetadata } from "@/lib/seo";
 import { revealDelay } from "@/lib/utils";
 
 export function generateStaticParams() {
@@ -20,24 +23,18 @@ export async function generateMetadata({
   const thing = thingBySlug(params.slug);
   if (!thing) return {};
 
-  return {
+  return pageMetadata({
+    path: `/things/${thing.slug}`,
     title: thing.title,
-    description: thing.blurb,
-    openGraph: {
-      title: thing.title,
-      description: thing.blurb,
-      type: "article",
-      // Each thing's poster is its social image. The site previously pointed
-      // every share card at a /og route that does not exist.
-      images: [{ url: thing.poster.src }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: thing.title,
-      description: thing.blurb,
-      images: [thing.poster.src],
-    },
-  };
+    description: thing.description,
+    type: "article",
+    publishedTime: thing.shipped,
+    // Each thing's poster is its social image, and it is a real screenshot of
+    // the piece rather than a generated title card, so it beats what the
+    // `opengraph-image` route would draw. The site previously pointed every
+    // share card at a /og route that does not exist.
+    images: [thing.poster.src],
+  });
 }
 
 export default async function ThingPage({
@@ -58,6 +55,17 @@ export default async function ThingPage({
       // Publishes this thing's hue to the subtree.
       // eslint-disable-next-line react/no-unknown-property
     >
+      <JsonLd
+        json={graph(
+          thingSchema(thing),
+          breadcrumbSchema([
+            { name: "Daniel Fleming", path: "/" },
+            { name: "Things", path: "/things" },
+            { name: thing.title, path: `/things/${thing.slug}` },
+          ])
+        )}
+      />
+
       <div style={hueStyle(thing.hue)} className="flex flex-col gap-8">
         <header className="reveal max-w-measure" style={revealDelay(0)}>
           <Link

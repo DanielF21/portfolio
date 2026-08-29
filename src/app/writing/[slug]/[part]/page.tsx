@@ -2,18 +2,25 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { JsonLd } from "@/components/json-ld";
 import { Container } from "@/components/layout/container";
 import { ArticleBody } from "@/components/writing/article-body";
 import { PartNav } from "@/components/writing/part-nav";
 import { hueStyle } from "@/data/hues";
 import { SERIES, seriesBySlug } from "@/data/series";
-import { SITE } from "@/data/site";
 import {
   getPart,
+  lastChanged,
   neighbours,
   seriesAppendices,
   seriesParts,
 } from "@/data/writing";
+import {
+  blogPostingSchema,
+  breadcrumbSchema,
+  graph,
+} from "@/lib/schema";
+import { pageMetadata } from "@/lib/seo";
 import { formatDate } from "@/lib/utils";
 
 /**
@@ -64,28 +71,22 @@ export async function generateMetadata({
   const doc = series ? await getPart(params.slug, params.part) : null;
   if (!series || !doc) return {};
 
-  const url = `${SITE.url}/writing/${series.slug}/${doc.slug}`;
-  const { title, summary, publishedAt, image } = doc.metadata;
+  const { title, summary, description, publishedAt, image } = doc.metadata;
 
-  return {
+  return pageMetadata({
+    path: `/writing/${series.slug}/${doc.slug}`,
     title,
-    description: summary,
-    alternates: { canonical: url },
-    openGraph: {
-      title,
-      description: summary,
-      type: "article",
-      publishedTime: publishedAt,
-      url,
-      ...(image ? { images: [{ url: image }] } : {}),
-    },
-    twitter: {
-      card: image ? "summary_large_image" : "summary",
-      title,
-      description: summary,
-      ...(image ? { images: [image] } : {}),
-    },
-  };
+    // `description` is written to fit a search result; `summary` is editorial
+    // and several are over 250 characters. Prefer the one that will not be
+    // truncated, and fall back rather than leave a page with none.
+    description: description ?? summary ?? series.description,
+    type: "article",
+    publishedTime: publishedAt,
+    modifiedTime: lastChanged(doc),
+    // No fallback image here: the segment's `opengraph-image` route generates
+    // one for every part, and naming an image in the metadata would override it.
+    ...(image ? { images: [image] } : {}),
+  });
 }
 
 export default async function PartPage({ params }: { params: Params }) {
@@ -107,22 +108,24 @@ export default async function PartPage({ params }: { params: Params }) {
   return (
     <Container as="main" width="page" className="py-block" >
       <div style={hueStyle(series.hue)}>
-        <script
-          type="application/ld+json"
-          suppressHydrationWarning
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "BlogPosting",
-              headline: doc.metadata.title,
-              datePublished: doc.metadata.publishedAt,
-              dateModified: doc.metadata.publishedAt,
-              description: doc.metadata.summary,
-              isPartOf: { "@type": "CreativeWorkSeries", name: series.title },
-              url: `${SITE.url}/writing/${series.slug}/${doc.slug}`,
-              author: { "@type": "Person", name: SITE.name },
+        <JsonLd
+          json={graph(
+            blogPostingSchema({
+              doc,
+              path: `/writing/${series.slug}/${doc.slug}`,
+              section: series.title,
+              series,
             }),
-          }}
+            breadcrumbSchema([
+              { name: "Daniel Fleming", path: "/" },
+              { name: "Writing", path: "/writing" },
+              { name: series.title, path: `/writing/${series.slug}` },
+              {
+                name: doc.metadata.title,
+                path: `/writing/${series.slug}/${doc.slug}`,
+              },
+            ])
+          )}
         />
 
         <header className="mb-8 max-w-measure">

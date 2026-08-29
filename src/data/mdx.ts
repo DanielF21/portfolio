@@ -44,6 +44,20 @@ export interface DocMeta {
   title: string;
   publishedAt: string;
   summary?: string;
+  /** The meta description, 140 to 160 characters.
+   *
+   *  Separate from `summary` because the two have different jobs and different
+   *  length limits. `summary` is editorial: it runs as long as the result needs
+   *  and several of them are over 250 characters, which a search engine simply
+   *  truncates. This one is written to fit. Falls back to `summary` when
+   *  absent, so a new document is never left without a description. */
+  description?: string;
+  /** ISO date of the last substantive revision. Feeds `dateModified`.
+   *
+   *  Absent means never revised, and `dateModified` then equals
+   *  `datePublished`. It is not defaulted to the build date: that would claim a
+   *  freshness no edit backs up. */
+  updatedAt?: string;
   image?: string;
   /** Drafts are excluded from every index and from prev/next, but stay
    *  reachable by direct URL so they can be previewed. */
@@ -76,11 +90,24 @@ export interface Heading {
 export interface DocSummary {
   slug: string;
   metadata: DocMeta;
+  /** Words in the markdown body, for `BlogPosting.wordCount`.
+   *
+   *  Counted here rather than in the caller because `listDocs` has already read
+   *  the file to parse its frontmatter, so it is free at this point and a
+   *  second read everywhere else. Counted on the SOURCE, before the pipeline
+   *  runs, so highlighting markup never inflates it. */
+  wordCount: number;
 }
 
 export interface Doc extends DocSummary {
   /** Rendered HTML, injected with dangerouslySetInnerHTML. */
   source: string;
+  /** The markdown body exactly as authored, frontmatter stripped.
+   *
+   *  Served verbatim by the `.md` routes and concatenated into
+   *  `/llms-full.txt`. Carried rather than re-read so the plain text and the
+   *  rendered page can never come from different revisions of the file. */
+  raw: string;
   /** Every heading that got an id, in document order. Collected during the
    *  same pass that renders the HTML rather than by re-parsing the output. */
   headings: Heading[];
@@ -202,6 +229,19 @@ function fixLinks(where: string) {
   };
 }
 
+/** Words in a markdown body.
+ *
+ *  Code fences, headings and table pipes are stripped first. A results table is
+ *  data, not prose, and counting its cells as words would put a 2,400 word
+ *  analysis at nearer 4,000. */
+function countWords(markdown: string): number {
+  const prose = markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^\s*\|.*\|\s*$/gm, " ")
+    .replace(/[#*_`>[\]()|]/g, " ");
+  return prose.split(/\s+/).filter(Boolean).length;
+}
+
 function resolveDir(dir: string) {
   return path.join(process.cwd(), dir);
 }
@@ -280,8 +320,13 @@ export const listDocs = cache(
     const abs = resolveDir(rel);
 
     return docNamesIn(rel).map((slug) => {
-      const raw = fs.readFileSync(path.join(abs, `${slug}.mdx`), "utf-8");
-      return { slug, metadata: matter(raw).data as DocMeta };
+      const file = fs.readFileSync(path.join(abs, `${slug}.mdx`), "utf-8");
+      const { data, content } = matter(file);
+      return {
+        slug,
+        metadata: data as DocMeta,
+        wordCount: countWords(content),
+      };
     });
   }
 );
@@ -309,7 +354,9 @@ export const getDoc = cache(
       slug: segments[segments.length - 1],
       metadata: data as DocMeta,
       source: html,
+      raw: content,
       headings,
+      wordCount: countWords(content),
     };
   }
 );

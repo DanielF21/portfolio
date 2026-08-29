@@ -1,6 +1,8 @@
+import type { Metadata } from "next";
 import { Briefcase, GraduationCap, MapPin } from "lucide-react";
 import Link from "next/link";
 
+import { JsonLd } from "@/components/json-ld";
 import { Container } from "@/components/layout/container";
 import { LiveBudgetProvider } from "@/components/things/live-budget-provider";
 import { FeaturedThing, ThingRow } from "@/components/things/thing-tile";
@@ -8,7 +10,19 @@ import { SeriesCard } from "@/components/writing/series-card";
 import { SITE } from "@/data/site";
 import { featuredThing, restOfThings } from "@/data/things";
 import { allSeries, oneOffs } from "@/data/writing";
+import { graph, personSchema, websiteSchema } from "@/lib/schema";
+import { pageMetadata } from "@/lib/seo";
 import { revealDelay } from "@/lib/utils";
+
+/**
+ * `title.absolute`, not `title`. The root template is `%s | Daniel Fleming`,
+ * so a plain string here would render "Daniel Fleming, MIT CS, engineer in San
+ * Francisco | Daniel Fleming".
+ */
+export const metadata: Metadata = {
+  ...pageMetadata({ path: "/", description: SITE.description }),
+  title: { absolute: "Daniel Fleming, MIT CS, engineer in San Francisco" },
+};
 
 /**
  * Home: a short statement, the writing, then the things.
@@ -38,6 +52,10 @@ export default async function Page() {
 
   return (
     <LiveBudgetProvider>
+      {/* The Person and the WebSite, emitted in full here and referenced by
+          `@id` from every other page. */}
+      <JsonLd json={graph(personSchema(), websiteSchema())} />
+
       <Container as="main" width="page" className="flex flex-col gap-block py-block">
         <header className="max-w-measure">
           <h1

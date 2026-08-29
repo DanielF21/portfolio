@@ -1,9 +1,10 @@
 ---
 title: "Against vLLM"
 publishedAt: "2026-08-29"
+description: "Part 9: eight parts of engine against vLLM 0.11.0 on one NVIDIA A10 with the same workload. Part 7's engine reaches 43% of vLLM's capacity, Part 8's 51%."
 series: "inference"
 part: 9
-summary: "Eight parts of engine, measured against vLLM 0.11.0 on the same GPU with the same workload. Part 7's engine reaches 43% of vLLM's capacity and Part 8's reaches 51%, both upper bounds since vLLM never saturated, and the concurrency ladder separates what is execution cost from what is a configured row limit."
+summary: "Eight parts of engine, measured against vLLM 0.11.0 on the same GPU with the same workload. Part 7's engine reaches 43% of vLLM's capacity and Part 8's reaches 51%, both upper bounds since vLLM never saturated."
 result: "43% and 51% of vLLM's capacity, a faster first token below saturation, and half the per token speed."
 code: "https://github.com/DanielF21/inference/tree/main/serving"
 ---
@@ -13,9 +14,9 @@ loop with no cache to one that sustains 5.68 requests per second. This
 part puts Part 7's engine and Part 8's engine against vLLM. **Part 7's
 engine serves 3.99 requests per second against vLLM's 9.33, which is
 43%, and Part 8's engine serves 4.79, which is 51%.** Both numbers are
-upper bounds, because vLLM was still getting faster at the end of its
-arrival grid and 9.33 is therefore a floor on its capacity. Of the head to
-head's 11,620 requests, 11,619 were served.
+upper bounds, because vLLM was still getting faster at the highest
+arrival rate it was given and 9.33 is therefore a floor on its capacity.
+One of the 11,620 requests failed.
 
 ## How the comparison is set up
 
@@ -34,18 +35,19 @@ the one thing disabled, because these engines have no such cache, and
 leaving it on would let vLLM answer some requests out of a store the
 other side does not have.
 
-My engines run behind a server I wrote. One thread owns the engine and
-runs its scheduling loop, and the web layer hands it requests over a
-queue rather than touching it. It refuses anything past 512 accepted and
-unfinished requests, a limit nothing here reached.
+My engines run behind an HTTP server I wrote. It refuses anything past
+512 accepted and unfinished requests, a limit nothing here reached.
 
 Both sides are given the same work: 400 arrivals per rate on a seeded
 schedule, prompts at five lengths from 16 to 4,096 tokens, and
 generation budgets from 64 to 256, which is the workload every earlier
 part used. Decoding is greedy and the end of sequence token is ignored,
-so every request generates its whole budget. The closed loop runs instead hold a
-fixed number of requests in flight, 1, 8, 32, and 128 of them, until a
-fixed set is done.
+so every request generates its whole budget.
+
+Those runs send each request at its scheduled time whether or not the
+server is keeping up. A second set of runs instead holds a fixed number
+of requests in flight, 1, 8, 32, and 128, starting a new one only when
+an old one finishes.
 
 Served rate is requests completed over the time from the first arrival
 to the last completion. Time to first token and latency are measured
@@ -74,18 +76,18 @@ Served requests per second, 400 requests per rate:
 ![Served rate against arrival rate](/figures/inference/vllm-served-rate.png)
 
 Part 8's engine caps out at 4.79 at 7 arrivals per second and 4.64 at 8,
-so 4.79 is its capacity. Part 7's engine flattens rather than losing capacity like 
-Part 8. It gains 0.18 across the three arrival rates (from 5 to 8), so 3.99 is its
-capacity to within that. vLLM gains 0.36 over its last three arrival rates and
-is still climbing at 16.
+so 4.79 is its capacity. Part 7's engine flattens instead of turning
+over. It gains 0.18 from 5 arrivals per second to 8, so 3.99 is its
+capacity to within that. vLLM gains 0.36 over its last three arrival
+rates and is still climbing at 16.
 
 Serving over HTTP costs each engine part of what it does in process.
-Part 7 goes from 4.53 requests per second to 3.99, (12% drop), and
-Part 8 from 5.68 to 4.79, (16% drop).
+Part 7 goes from 4.53 requests per second to 3.99, a 12% drop, and Part
+8 from 5.68 to 4.79, a 16% drop.
 
 Median time to first token, and median total latency, by arrival rate:
 
-| arrival rate | P7 first token | P8 first token | vLLM first token | P7 total | P8 total | vLLM total |
+| arrival rate | Part 7 first token | Part 8 first token | vLLM first token | Part 7 total | Part 8 total | vLLM total |
 |---|---|---|---|---|---|---|
 | 2 | 0.28 s | 0.39 s | 0.69 s | 5.32 s | 4.63 s | 2.45 s |
 | 4 | 0.47 s | 0.43 s | 0.69 s | 7.65 s | 5.46 s | 2.74 s |
@@ -105,22 +107,23 @@ second:
 | 32 | 639 | 711 | 1,099 |
 | 128 | 640 | 756 | 1,501 |
 
-![Throughput against concurrency](/figures/inference/vllm-throughput.png)
+![Throughput against requests in flight](/figures/inference/vllm-throughput.png)
 
 ## Why all three are the same below 4 arrivals per second
 
-At 2 arrivals per second the three servers are pretty much indistinguishable:
-they all serve at rates of 1.85 to 1.88 reqs/s. At 4 they are 3.53 to 3.71 reqs/s. 
-The difference only appears once my engines stop keeping up at about 5 arrivals per second 
-for Part 7's and 6 for Part 8's.
+At 2 arrivals per second the three servers serve 1.85 to 1.88 requests
+per second. At 4 they serve 3.53 to 3.71. The difference only appears
+once my engines stop keeping up, at about 5 arrivals per second for Part
+7's and 6 for Part 8's.
 
-Below saturation every arriving request gets served promptly
-by all three of these engines, so the served rate is just the arrival rate 
-which says nothing besides the fact that the arrival rate is under the engine's 
-max capacity. So the comparison is entirely about where those three ceilings are, which is 3.99 (P7), 4.79 (P8), and at 9.33 (vLLM).
+Below saturation every request is served as it arrives, so the served
+rate is the arrival rate. That says only that the arrival rate is under
+the engine's capacity. So the comparison is about where those three
+ceilings are: 3.99 for Part 7, 4.79 for Part 8, and at least 9.33 for
+vLLM.
 
-Capacity is not the only thing that differs, though, and the closed loop
-numbers say where the rest of it is.
+Capacity is not the only thing that differs, and the closed loop runs
+measure the rest.
 
 ## Why vLLM is about twice as fast
 
@@ -147,9 +150,9 @@ joining a batch. vLLM's own limit was never measured here, and all this
 head to head shows is that it is above 32, since vLLM turned those extra
 requests into tokens and the engines could not.
 
-So the deficit has two causes and they are different in kind. Most of it
-is the cost of executing a step, which is still 1.55 times where the
-engine does best. The rest is one configured number.
+So the deficit has two causes. Most of it is the cost of executing a
+step, which is still 1.55 times at 32 requests in flight. The rest is
+the 32 row limit.
 
 ## Why my engines start faster and finish slower
 
@@ -165,7 +168,7 @@ queueing at 2 arrivals per second, so that is the per token cost from
 the previous section showing up as latency: generating the same number
 of tokens at 36 per second against 75 takes about twice as long.
 
-Both halves come with the same measurement caveat. The two servers are
+Both of those numbers come with the same caveat. The two servers are
 read through different interfaces. Mine reports a first token when the
 engine produces it, and vLLM's is counted when the text arrives. That
 difference lands in the first token number and not in the totals. The
@@ -180,31 +183,32 @@ than everything else in the measurement combined.
 
 ## Caveats
 
-vLLM was still rising at the end of its grid, 8.97 then 9.02 then 9.33,
-so 9.33 is a floor on its capacity and the two headline percentages are
-upper bounds on how close these engines get. Extending the grid until it
-turned over would have settled it and was not run.
+vLLM was still rising at the highest arrival rate it was given, 8.97
+then 9.02 then 9.33, so 9.33 is a floor on its capacity and the two
+headline percentages are upper bounds on how close these engines get.
+Going past 16 arrivals per second until it turned over would have
+settled it and was not run.
 
 Time to first token is read through two different interfaces, as
 described above, so no experiment here separates protocol cost from
 engine cost. Serving vLLM through an endpoint written the same way as
-mine would have. Served rate and tokens per second are unaffected, since
-both count whole requests and whole tokens over a span.
+mine would have settled it, and was not done. Served rate and tokens per
+second are unaffected, since both count whole requests and whole tokens
+over a span.
 
 The load generator runs on a laptop and sends over the public internet,
 which adds a round trip to every request. It is the same round trip for
-all three servers and it was measured before each sweep, but it inflates
+all three servers and it was measured before each run, but it inflates
 every latency here compared to a client in the same datacenter.
 
-Both engines ran at 32 batch rows with no pool ceiling because that is
-what Parts 7 and 8 published. vLLM chose its own memory split and its
-own limits. This compares two published configurations, not two systems
-tuned equally hard, and the runs at 128 requests in flight are where
-that shows.
+Both engines ran at 32 batch rows with no pool ceiling. vLLM chose its
+own memory split and its own limits. This compares two published
+configurations, not two systems tuned equally hard, and the runs at 128
+requests in flight are where that shows.
 
-Each arrival rate ran once, on one container, from one seeded trace. A
-slow draw from the GPU pool would show up as one slow arrival rate and
-nothing here would catch it.
+Each arrival rate ran once, on one container, from one seeded trace. If
+one container got a slower A10 than the others, it would show up as one
+slow arrival rate and nothing here would catch it.
 
 ## Reproducing this
 
@@ -230,13 +234,13 @@ uv run python scripts/plot_vllm.py
 
 Greedy decoding, seed 0, Qwen2.5 1.5B in fp16, Modal A10, vLLM 0.11.0.
 One row per request lands in `results/vllm/serving.csv`, and one
-metadata file per sweep records the server's own description of itself,
+metadata file per run records the server's own description of itself,
 the round trip time, and a check that nothing between the client and the
 server was buffering the stream. The targets run one at a time, since
-two sweeps at once would share the laptop's uplink and neither one's
+two runs at once would share the laptop's uplink and neither one's
 arrival timing would be trustworthy. The rate 8 runs are listed
-separately because they were added after the grids ran, to push both
-engines past their peaks.
+separately because they were added to push both engines past their
+peaks.
 
 Every percentile in this writeup is computed from that file rather than
 from the load generator's own summary lines, which were wrong while this

@@ -28,13 +28,45 @@ export interface Poster {
   readonly src: string;
   readonly width: number;
   readonly height: number;
+  /**
+   * What the picture shows, for a reader who cannot see it.
+   *
+   * Both places that render a poster passed `alt=""`, which declares an image
+   * decorative. For an index row beside a title that is defensible; for the
+   * poster on a thing's own page it is not, because on the two immersive
+   * pieces that image IS the piece until someone presses Enter, and the page's
+   * entire description of what is on screen was one blurb.
+   *
+   * Describes the frame, not the idea. "An interactive diagram" is what the
+   * blurb already says; "28 dark plates receding along an orange stream" is
+   * what is actually in the picture.
+   */
+  readonly alt: string;
 }
 
 export interface Thing {
   readonly slug: string;
   readonly title: string;
-  /** One sentence. Used on the index row and as the page's OG description. */
+  /** One sentence. The index row and the line under the page's title. */
   readonly blurb: string;
+
+  /** The page's meta description, 140 to 160 characters.
+   *
+   *  Separate from `blurb` for a reason specific to this collection: a blurb is
+   *  a label beside a picture and several are under 40 characters ("Interactive
+   *  diagram of Qwen2.5-1.5B"), which as a search result description says
+   *  almost nothing. This names the technique as well as the subject. */
+  readonly description: string;
+
+  /** Public source, when there is one. Feeds `codeRepository` in the page's
+   *  JSON-LD, and is the reason a thing can be a `SoftwareSourceCode` rather
+   *  than a bare `CreativeWork`.
+   *
+   *  Separate from `links` even where the two coincide: `links` is display and
+   *  holds whatever is worth clicking (a chess.com profile, a paper), and
+   *  reading a repository out of it would mean guessing which row is the repo
+   *  from its label. */
+  readonly repo?: string;
   /** ISO date. The sole input to ordering and to "newest". */
   readonly shipped: string;
   readonly hue: Hue;
@@ -77,9 +109,21 @@ export const THINGS: readonly Thing[] = [
     slug: "llm",
     title: "Language Model",
     blurb: "Interactive diagram of Qwen2.5-1.5B",
+    description:
+      "An interactive drawing of Qwen2.5-1.5B at true scale: every weight's " +
+      "on-screen area is its parameter count. Built with Three.js and React Three Fiber.",
+    repo: "https://github.com/DanielF21/portfolio",
     shipped: "2026-08-16",
     hue: "indigo",
-    poster: { src: "/things/llm/poster.png", width: 1600, height: 1000 },
+    poster: {
+      src: "/things/llm/poster.png",
+      width: 1600,
+      height: 1000,
+      alt:
+        "The Qwen2.5-1.5B plate: a numbered contents rail on the left, 28 dark " +
+        "transformer block plates receding along a horizontal orange residual " +
+        "stream in the centre, and a detail panel on the right.",
+    },
     stage: "immersive",
     // Same reasoning as the planet's: three, R3F and this scene's geometry are
     // far too much to pull onto an index page for decoration.
@@ -95,9 +139,21 @@ export const THINGS: readonly Thing[] = [
     slug: "planet",
     title: "Planet",
     blurb: "A small world you can walk around.",
+    description:
+      "A walkable low-poly planet in the browser. Moving is rotating a frame " +
+      "on a sphere, so it has no poles and no seams. Built with Three.js and WebGL.",
+    repo: "https://github.com/DanielF21/portfolio",
     shipped: "2026-08-14",
     hue: "violet",
-    poster: { src: "/things/planet/poster.png", width: 1600, height: 1000 },
+    poster: {
+      src: "/things/planet/poster.png",
+      width: 1600,
+      height: 1000,
+      alt:
+        "A low-poly planet against a night sky. Its lit edge shows a green island " +
+        "with faceted trees and a wooden windmill, pale beaches, and dark blue " +
+        "water curving away over the horizon.",
+    },
     stage: "immersive",
     // "none" until a loop exists at public/things/planet/preview.webm; then
     // change this word to "video" and it turns on.
@@ -115,9 +171,20 @@ export const THINGS: readonly Thing[] = [
     slug: "chess",
     title: "Chess bot",
     blurb: "A convolutional net trained on over a million lichess games.",
+    description:
+      "A chess engine that plays the way Daniel Fleming does: a convolutional " +
+      "net trained on a million lichess games, fine tuned on his own openings.",
+    repo: "https://github.com/DanielF21/Chess-Bot",
     shipped: "2024-09-01",
     hue: "amber",
-    poster: { src: "/things/chess/poster.png", width: 1600, height: 1000 },
+    poster: {
+      src: "/things/chess/poster.png",
+      width: 1600,
+      height: 1000,
+      alt:
+        "A white chess knight standing on a wooden board, facing a toppled black " +
+        "king.",
+    },
     stage: "inline",
     preview: "live",
     tech: ["PyTorch", "chess.js", "Flask"],
@@ -132,9 +199,20 @@ export const THINGS: readonly Thing[] = [
     slug: "scheme",
     title: "Scheme interpreter",
     blurb: "A Scheme interpreter with a live REPL.",
+    description:
+      "A Scheme interpreter with a live REPL in the browser. Reader, evaluator " +
+      "and environment model written from scratch in Python, behind a Flask API.",
+    repo: "https://github.com/DanielF21/Scheme-Interpreter",
     shipped: "2022-12-01",
     hue: "cyan",
-    poster: { src: "/things/scheme/poster.png", width: 1600, height: 1000 },
+    poster: {
+      src: "/things/scheme/poster.png",
+      width: 1600,
+      height: 1000,
+      alt:
+        "A green-on-black REPL transcript: the input (define pi 3.14) returning " +
+        "3.14, then (+ pi pi) returning 6.28, then an empty prompt.",
+    },
     stage: "inline",
     preview: "live",
     tech: ["Python", "Flask"],

@@ -1,6 +1,7 @@
 ---
 title: "A library kernel for decode"
 publishedAt: "2026-08-29"
+description: "Part 8: swapping my decode kernel for FlashAttention's paged cache kernel. Sustained service rises from 4.53 to 5.68 req/s, the decode step falls to 24.0 ms."
 series: "inference"
 part: 8
 summary: "Replacing my decode attention kernel with flash attention's paged cache kernel, and nothing else. Sustained service rises from 4.53 to 5.68 req/s, the pure decode step falls from 31.3 ms to 24.0 ms, and the memory pool's pages have to grow four times larger to allow it."

@@ -24,14 +24,41 @@ const nextConfig = {
    * The cost is a hop through Vercel on every request.
    */
   async rewrites() {
+    /**
+     * A plain markdown copy of every article, at its own URL plus ".md".
+     *
+     * The extension is spelled HERE and nowhere else. It cannot live in a
+     * dynamic segment: `[part]` would capture "paged.md", and the segment
+     * validator in `data/mdx.ts` rejects a dot, which is the behaviour that
+     * keeps a URL from climbing out of the content directory. So the public
+     * `.md` URL is rewritten onto a handler that takes the same clean segments
+     * the page does.
+     *
+     * Rewrites, not redirects: the markdown is served AT the .md URL rather
+     * than bouncing to a different one, which is what a consumer fetching it
+     * expects, and it keeps `/writing/<x>` and `/writing/<x>.md` as two
+     * representations of one document rather than two pages.
+     */
+    const markdown = [
+      {
+        source: "/writing/:slug.md",
+        destination: "/api/writing-md/:slug",
+      },
+      {
+        source: "/writing/:slug/:part.md",
+        destination: "/api/writing-md/:slug/:part",
+      },
+    ];
+
     if (!BACKEND_URL) {
       console.warn(
         "[next.config] BACKEND_URL is not set. /api/backend/* will 404 and the " +
           "chess and scheme things will report that the backend is unreachable."
       );
-      return [];
+      return markdown;
     }
     return [
+      ...markdown,
       {
         source: "/api/backend/:path*",
         destination: `${BACKEND_URL}/:path*`,

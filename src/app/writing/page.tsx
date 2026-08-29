@@ -1,15 +1,22 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
+import { JsonLd } from "@/components/json-ld";
 import { Container } from "@/components/layout/container";
 import { blurbText } from "@/data/series";
 import { hueStyle } from "@/data/hues";
 import { allSeries, oneOffs } from "@/data/writing";
+import { breadcrumbSchema, graph } from "@/lib/schema";
+import { pageMetadata } from "@/lib/seo";
 import { formatDate, revealDelay } from "@/lib/utils";
 
-export const metadata = {
+export const metadata: Metadata = pageMetadata({
+  path: "/writing",
   title: "Writing",
-  description: "Long-form writing, one-offs and series.",
-};
+  description:
+    "Long form writing by Daniel Fleming on LLM inference: building an engine " +
+    "from scratch, KV caching, paged attention, continuous batching, vLLM.",
+});
 
 /**
  * The index, holding two shapes at once.
@@ -41,6 +48,15 @@ export default async function WritingPage() {
 
   return (
     <Container as="main" width="measure" className="flex flex-col gap-8 py-block">
+      <JsonLd
+        json={graph(
+          breadcrumbSchema([
+            { name: "Daniel Fleming", path: "/" },
+            { name: "Writing", path: "/writing" },
+          ])
+        )}
+      />
+
       <header className="reveal" style={revealDelay(0)}>
         <h1 className="font-display text-page font-bold">Writing</h1>
       </header>

@@ -49,9 +49,19 @@ export interface Series {
   /** Also the content subdirectory name and the URL segment. */
   readonly slug: string;
   readonly title: string;
-  /** A few sentences. Used on the hub, the home card, the writing index, and as
-   *  the hub's OG description. */
+  /** A few sentences. Used on the hub, the home card, and the writing index. */
   readonly blurb: readonly BlurbPart[];
+  /** The hub's meta description, 140 to 160 characters.
+   *
+   *  Not derived from `blurb`. The blurb is display prose and runs whatever
+   *  length reads well beside the title; a description has a length a search
+   *  engine will not truncate, and it has to name the model and the hardware,
+   *  which a reader already looking at the page does not need told.
+   *
+   *  It carries no part COUNT, deliberately. A number here is a roadmap in
+   *  disguise and goes stale the moment a part ships, which is the same reason
+   *  there is no `parts` list in this file. */
+  readonly description: string;
   readonly hue: Hue;
   /** ISO date of the first part. Orders the series against one-off writing. */
   readonly started: string;
@@ -67,6 +77,9 @@ export const SERIES: readonly Series[] = [
       "I am building an inference engine from scratch to see " +
         "what it actually takes to make a model fast.",
     ],
+    description:
+      "Building an LLM inference engine from scratch for Qwen2.5-1.5B on one " +
+      "NVIDIA A10, measured at every step and benchmarked against vLLM 0.11.0.",
     hue: "teal",
     started: "2026-08-08",
     source: {

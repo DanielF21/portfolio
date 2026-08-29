@@ -1,6 +1,7 @@
 ---
 title: "Paged attention"
 publishedAt: "2026-08-25"
+description: "Part 5: KV moves into fixed size blocks and decode reads each row at its true length. The engine serves 3 req/s where Part 4 saturated at 1.25 req/s."
 series: "inference"
 part: 5
 summary: "KV moves into fixed size blocks and the decode kernel reads each row at its true length. The engine serves 3 req/s where Part 4 saturated at 1.25, and every cost that remains belongs to prefill."

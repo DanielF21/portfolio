@@ -1,13 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
+import { JsonLd } from "@/components/json-ld";
 import { Container } from "@/components/layout/container";
 import { ROLES, SCHOOLS, STUDIES } from "@/data/work";
+import { breadcrumbSchema, graph } from "@/lib/schema";
+import { pageMetadata } from "@/lib/seo";
 import { revealDelay } from "@/lib/utils";
 
-export const metadata = {
+export const metadata: Metadata = pageMetadata({
+  path: "/work",
   title: "Work",
-  description: "Where I have worked and what I studied.",
-};
+  description:
+    "Where Daniel Fleming has worked and what he studied: founding engineer " +
+    "at Netic AI, computer science at MIT, and the research work underneath.",
+});
 
 const LINK_LABELS: Record<string, string> = {
   github: "Source",
@@ -26,6 +33,15 @@ const LINK_LABELS: Record<string, string> = {
 export default function WorkPage() {
   return (
     <Container as="main" width="measure" className="flex flex-col gap-block py-block">
+      <JsonLd
+        json={graph(
+          breadcrumbSchema([
+            { name: "Daniel Fleming", path: "/" },
+            { name: "Work", path: "/work" },
+          ])
+        )}
+      />
+
       <header className="reveal" style={revealDelay(0)}>
         <h1 className="font-display text-page font-bold">Work</h1>
         <a

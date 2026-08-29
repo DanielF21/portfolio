@@ -1,6 +1,7 @@
 ---
 title: "No cache at all"
 publishedAt: "2026-08-08"
+description: "Part 1: a decode loop with no KV cache. Every step reprocesses the whole sequence, and at a 4096 token prompt 99.6% of the arithmetic is recomputation."
 series: "inference"
 part: 1
 summary: "Every step reprocesses the whole sequence, and 99.6% of the arithmetic at a 4096 token prompt is recomputing values that cannot change."
