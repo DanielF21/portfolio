@@ -74,7 +74,7 @@ export const SERIES: readonly Series[] = [
     slug: "inference",
     title: "Building an inference engine",
     blurb: [
-      "I am building an inference engine from scratch to see " +
+      "I built an inference engine from scratch to see " +
         "what it actually takes to make a model fast.",
     ],
     description:
