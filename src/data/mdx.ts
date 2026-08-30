@@ -211,6 +211,16 @@ function fixLinks(where: string) {
       const href = node.properties.href;
       if (typeof href !== "string") return;
 
+      // A site-internal link opts into a new tab by carrying the title
+      // "new tab". Markdown cannot set target, and this pipeline does not
+      // enable raw HTML, so the title attribute is the only hook an author
+      // has. It is consumed here rather than rendered as a tooltip.
+      if (node.properties.title === "new tab") {
+        node.properties.target = "_blank";
+        node.properties.rel = "noopener noreferrer";
+        delete node.properties.title;
+      }
+
       if (/^https?:\/\//i.test(href)) {
         node.properties.target = "_blank";
         node.properties.rel = "noopener noreferrer";

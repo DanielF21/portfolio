@@ -1,11 +1,11 @@
 ---
 title: "Building an inference engine"
 publishedAt: "2026-08-08"
-description: "An inference engine, built from scratch for Qwen2.5-1.5B on one NVIDIA A10: the model, the machine, and the four numbers every part is measured against."
-summary: "The model, the machine, and the four numbers every part is measured against."
+description: "An inference engine, built from scratch for Qwen2.5-1.5B on one NVIDIA A10: the model, the machine, and the five numbers every part is measured against."
+summary: "The model, the machine, and the five numbers every part is measured against."
 ---
 
-A language model that has finished training is not yet a service. Something
+A language model on its own is not a service. Something
 has to hold it in memory, take a prompt, run the model once for every token it
 produces, and hand the tokens back. That something is an inference engine, and
 it decides how fast the first word appears, how fast the rest follow, and how
@@ -22,44 +22,58 @@ A model does not produce an answer. It produces one token, which is a word or
 a fragment of one, and then it is done. To get a sentence out you feed it the
 prompt, take the token it returns, append that token to the prompt, and feed
 the whole thing back. Generating 256 tokens means running the model 256 times.
-
-That loop has two halves, and they cost completely different things.
+This loop has two parts.
 
 **Prefill** is the first pass, the one over the prompt. Every token of the
 prompt goes through the model at once, which is a large amount of arithmetic
 performed in one go. Its cost grows with the length of the prompt.
 
-**Decode** is every pass after that. Each one handles a single new token.
-There is very little arithmetic in a decode step, but the model's entire set
-of weights still has to be read out of memory to perform it, and on the 1.5
-billion parameter model used here that is 3.09 GB. Reading 3.09 GB at the
-A10's 600 GB/s takes 5.15 ms. That is the fastest a single token can possibly
-appear on this card: **194 tokens/s**.
+**Decode** is every pass after that. Each one handles a single new token, and
+almost no arithmetic is needed to produce it. What is needed is the model
+itself: a token passing through the model is multiplied against every weight
+in it, so every one of those weights has to be read out of GPU memory first.
+That read costs the same whether the pass is putting one token through the
+model or four thousand.
 
-The two are reported separately in every part. **Time to first token** is the
-cost of prefill, the wait before anything appears on screen. **Inter token
-latency** is the cost of one decode step, the gap between words once they
-start. tokens/s is that gap inverted. Averaging the two together
-hides both.
+Prefill and decode are therefore limited by different things. Prefill runs out
+of arithmetic units. Decode runs out of memory bandwidth, waiting on weights
+while the arithmetic units are mostly idle. The two respond to different
+fixes, and every part measures them separately.
 
-One more property of the loop. Attention works by having each token compare
-itself against every earlier token and take a weighted sum of what it finds.
-Each token contributes two vectors to that: a key, which later tokens match
-against, and a value, which they sum. Attention is causal, so a token may look
-backwards and never forwards, which means a token's key and value are fixed
-the moment they are computed. Whatever the model works out about token 5 is
-the same on step 6 as it is on step 200.
+![Prefill and decode over a six token prompt](/figures/inference/index-passes.png)
 
-An engine can therefore hold those keys and values between steps, or throw
-them away and derive them again. Holding them is what a **KV cache** is.
+**Time to first token** is the cost of prefill, the wait before anything
+appears on screen. **Inter token latency** is the cost of one decode pass, the
+gap between words once they start. tokens/s is that gap inverted. Averaging
+the two together hides both.
+
+Attention works by having each token compare itself against every earlier
+token and take a weighted sum of what it finds. Each token contributes two
+vectors to that: a key, which later tokens match against, and a value, which
+they sum. Attention is causal, so a token may look backwards and never
+forwards, which means a token's key and value are fixed the moment they are
+computed. Whatever the model works out about token 5 is the same when token 6
+is produced as when token 200 is.
+
+An engine can therefore hold those keys and values between passes, or throw
+them away and derive them again. Holding them is what a **KV cache** is. It is
+memory the engine keeps for as long as a request is alive, and it grows by two
+vectors per layer with every token the request accumulates.
+
+Several requests that are all decoding can have their tokens put through the
+model in the same pass, and that pass reads the weights once rather than once
+per request. Two requests running together therefore cost barely more than one
+and produce twice as many tokens, which is the only way past the speed of a
+single read. Running requests together is called **batching**, and deciding
+which requests go into a pass, and when, is most of what the later parts of
+this series are about.
 
 So an engine is three things: the loop that runs the model, the memory it
-holds between steps, and the decision of which requests run together.
+holds between passes, and the decision of which requests run together.
 
-## The model and the machine
+## Language Model and GPU Used
 
-**Qwen2.5-1.5B** in fp16, fixed across every part. The engine is the only
-independent variable.
+**Qwen2.5-1.5B** in fp16
 
 | | | | |
 |---|---|---|---|
@@ -71,9 +85,8 @@ independent variable.
 There are 12 attention heads but only 2 key value heads, an arrangement called
 grouped query attention. Under it, several attention heads share one set of
 keys and values instead of each keeping its own, which makes the memory a
-cache holds 6x smaller. The 28
-layers are the multiplier on nearly everything else: each one holds its own
-slice of that memory, and each one issues its own instructions to the GPU.
+cache holds 6x smaller. The 28 layers are the multiplier on nearly everything else: each one holds its own
+slice of that memory, and each one issues its own instructions to the GPU. I built an interactive diagram of this model, [click here to see it](/things/llm "new tab").
 
 **NVIDIA A10, rented from Modal.** Local machines are for the dev loop only.
 Every recorded number in every part comes from the A10, so the parts are
@@ -93,26 +106,50 @@ considered](/writing/inference/modal-chip-analysis).
 
 ## What the hardware sets
 
-Four numbers follow from the model and the card alone. They say what any
-engine here can and cannot do before a line of it is written.
+Five numbers follow from the two tables above and nothing else. They say what
+any engine here can and cannot do before a line of it is written, and each one
+is a single piece of arithmetic over numbers already on this page.
 
 | | | |
 |---|---|---|
-| KV cache | 28 KiB per token | grouped query attention makes it 6x smaller than plain multi head attention would be |
-| Ridge point | 208 FLOP per byte | below this the A10 runs out of data before it runs out of compute |
-| Batch 1 ceiling | 194 tok/s | reading 3.09 GB of weights at 600 GB/s takes 5.15 ms, and one token needs all of them |
+| Weights | 3.09 GB | 1.54 B parameters at 2 bytes each, in fp16 |
+| Batch 1 ceiling | 194 tok/s | 3.09 GB / 600 GB/s = 5.15 ms to read the weights once |
+| KV cache | 28 KiB per token | 2 vectors x 2 bytes x 28 layers x 2 key value heads x 128 head dim = 28,672 bytes |
+| Ridge point | 208 FLOP per byte | 125 TFLOPS / 600 GB/s |
 | Free for the cache | ~19 GiB | measured on the card after the model is loaded, not read off a spec sheet |
 
-Two of those need a definition. **Arithmetic intensity** is how many arithmetic
-operations a piece of work performs for each byte it moves. Every chip has a
-**ridge point**, the intensity at which its arithmetic units and its memory
-system would finish at the same moment. Work below the ridge point leaves the
-arithmetic units idle waiting on data. Work above it leaves the memory system
-idle instead. Prefill sits well above the A10's ridge point and decode sits
-far below it, which is why they are measured separately and why they respond
-to different fixes.
+**194 tok/s is the fastest one request can possibly generate on this card.** A
+decode pass produces one token and reads all 3.09 GB to do it, so 5.15 ms is
+the floor on that pass no matter how the engine is written. The ceiling
+applies to one request, not to the card. Running several requests through one
+pass reads the same 3.09 GB once and produces one token for each of them,
+which raises the total and leaves this number where it is.
 
-[Where each of these comes from](/writing/inference/arithmetic).
+**28 KiB per token is small enough that cache capacity is not what binds on
+this model.** 19 GiB at 28 KiB per token is about 711,000 token positions,
+which is 163 requests each holding a 4096 token prompt and its 256 generated
+tokens. Grouped query attention is the reason. Under plain multi head
+attention the same model would spend 168 KiB per token, 6x more, and the card
+would hold 27 such requests instead. That changes which optimizations are
+worth building here and in what order, and it is the reason the memory
+management parts of this series are measured on how fast they run rather than
+on how much they fit.
+
+**Arithmetic intensity** is how many arithmetic operations a piece of work
+performs for each byte it moves. Every chip has a **ridge point**, the
+intensity at which its arithmetic units and its memory system would finish at
+the same moment. Work below it leaves the arithmetic units idle waiting on
+data. Work above it leaves the memory system idle instead.
+
+A pass over n tokens has an intensity of roughly n, because the weights are
+read once per pass no matter how many tokens go through it. So the A10's ridge
+point of 208 FLOP per byte falls at about 208 tokens. Prefill over a 4096
+token prompt sits well above it. A decode pass puts one token through, so it
+sits at roughly 1, a factor of 200 below. That single comparison is why
+prefill and decode are reported separately everywhere in this series, and why
+batching is the lever that matters for decode and does nothing for prefill.
+
+[Where each of these comes from](/writing/inference/arithmetic), and [the FLOP and byte counts](/writing/inference/mfu-calculation) behind the utilization tables.
 
 ## The workload
 
@@ -130,7 +167,7 @@ runs**. The first two parts run at batch size 1 throughout. Later parts add
 batching, and they also report open runs, where requests arrive over time and
 one pass over the arrival trace is the measurement.
 
-## The only variable
+## What changes in each section of this writing
 
 The model, the card, the prompts, the sampling and the run counts are fixed
 and stay fixed. The engine is the only thing that changes from one part to the
