@@ -51,6 +51,13 @@ processed, and that prefill runs inside the same step the running requests
 are waiting on. The gap between two of an incumbent's tokens therefore
 stretches when someone joins, and a later section measures by how much.
 
+![Slot occupancy under continuous batching](/figures/inference/continuous-slots.png)
+
+The same eight requests through the same four slots, at the same scale and
+over the same range as [the figure in Part 3](/writing/inference/batched).
+Nothing is red, because a slot is refilled the step its row finishes, and each
+newcomer's prefill is the grey block immediately before its first token.
+
 Because rows join at different times with different lengths, every decode
 step tells the model which cache columns belong to which row through a mask,
 the same arrangement Part 3's mixed batches used. There is no unmasked fast
@@ -178,25 +185,6 @@ Nothing in this engine bounds that spike. The standard fix is to split a long
 prefill into fixed size chunks so decode steps run between them, and this part
 did not build it.
 
-## What the machinery costs when it buys nothing
-
-Two closed controls price the scheduler on workloads where re-forming the
-batch every step cannot help.
-
-| configuration | continuous | static (Part 3) | delta |
-|---|---|---|---|
-| p256 uniform, 8 rows | 6.06 s | 5.95 s | +1.8% |
-| p256 uniform, 32 rows | 6.48 s | 6.36 s | +1.9% |
-| mixed draw, 8 rows | 11.85 s | 14.33 s | 17% faster |
-| mixed draw, 32 rows | 34.32 s | 46.91 s | 27% faster |
-
-On a uniform batch, where no row finishes early and nothing queues, the per
-step scheduling work and the always masked attention path cost about 2%. On
-the mixed draws the eviction win dominates immediately. The static engine
-spent 37.5% of its decode row steps computing rows that had already
-finished, by construction of the draw's budgets, and this engine spends
-none.
-
 ## Caveats
 
 The mixed draws and arrival traces are one seeded sample each, shared with
@@ -210,10 +198,6 @@ per step trace separating mask width cost from batch size cost would pin it,
 and belongs to the part that changes the cache layout, since that is the
 change the answer would steer.
 
-Per step timing stops are unchanged from Part 3, whose control measured
-them at 1.8 to 2.1 ms per step, 2 to 6% of throughput. Published numbers
-are again left unadjusted.
-
 ## Bottleneck, and what follows
 
 The binding constraint is the shape of attention over the cache: one wide
@@ -226,7 +210,7 @@ A paged cache stores each row's tokens in fixed size blocks and lets
 attention read each row at its own true length, so the batch stops paying
 for its widest member. That is the next engine.
 
-## Prediction, recorded before building the paged engine
+## Prediction
 
 Uniform batches of 32 decode at 1,264 to 1,400 tokens per second at every
 prompt length from 256 to 4096, so attention over true lengths at batch 32
@@ -253,6 +237,7 @@ uv run modal run modal_app.py::arrivals --engine continuous \
     --rates 7,5,4 --n-requests 400 --max-batch 32
 uv run modal run modal_app.py::arrivals --engine continuous \
     --rates 3,2,1 --n-requests 400 --max-batch 32
+uv run python scripts/plot_batching.py
 ```
 
 Greedy decoding, seed 0, 2 warmup and 5 recorded runs per closed

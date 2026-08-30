@@ -45,6 +45,13 @@ occupying its slot until the whole batch is done. Those two properties are
 what the engines after this one exist to remove, so they are measured here
 rather than patched.
 
+![Slot occupancy under static batching](/figures/inference/batched-slots.png)
+
+Eight requests through four slots, drawn to scale in decode steps. Green is a
+request in progress and red is a slot still running a forward pass for a
+request that has already finished. The batch does not re-form until every red
+block ends.
+
 Two batch shapes are measured separately. A **uniform** batch replicates one
 prompt B times with one shared budget. Every row does identical work and the
 cache holds no empty space. A **ragged** batch draws mixed prompt lengths and
@@ -65,14 +72,14 @@ three match exactly.
 Part 2 recorded this prediction:
 
 > Step time should stay near 22 ms as batch size grows, because the 1,123 GPU
-> instructions per pass do not multiply with the number of sequences riding
+> instructions per pass do not multiply with the number of sequences going
 > through it. **Aggregate throughput should be roughly `B x 45.5 tok/s`, close
 > to linear.**
 >
 > It should stop being linear when the memory traffic per step catches up with
 > the 22 ms budget. At 600 GB/s a 22 ms step can move 13.2 GB. The weights
 > take 3.09 GB of that, leaving about 10.1 GB for the cache, which is roughly
-> 353,000 token positions at 28 KiB each. **That is the wall, and at 512 token
+> 353,000 token positions at 28 KiB each. **That is the limit, and at 512 token
 > sequences it is around batch 690.**
 >
 > Capacity would not bind before that.
@@ -154,26 +161,18 @@ convergence, because these configurations move very different amounts of
 cache per step. A limit set by arithmetic can, because every decoded token
 costs the same 3.09 GFLOPs of matrix work whatever its context length.
 
-The arithmetic: 12,766 tokens/s times 3.09 GFLOPs per token is 39.4 TFLOPS.
-The best matrix throughput ever measured in this series is 45.4 TFLOPS, by
-Part 1's engine at its most compute bound, against the A10's nominal 125. So
-this engine's decode levels off at 87% of the best rate this model's kernels
-have ever achieved on this card. The memory system, meanwhile, is far from
+The arithmetic: 12,766 tokens/s times 3.09 GFLOPs per token is 39.4 TFLOPS,
+against the A10's nominal 125. The memory system, meanwhile, is nowhere near
 its limit. At p16 and B=1024 a decode step moves the 3.09 GB of weights plus
 about 4.2 GB of cache in an 80 ms step, roughly 91 GB/s against the 600 GB/s
 the card can read at, 15% of it.
 
-Decode is now limited by arithmetic. No engine in this series has been
-limited by arithmetic during decode before. Every previous one was waiting on
-memory or on the CPU. The prediction modeled the memory traffic limit
-correctly and lost to a limit it did not model, because at 45.5 tokens per
-second per sequence, 512 sequences already demand a third of what the card's
-matrix units deliver in practice.
+Decode is now limited by arithmetic, which no engine in this series has been
+before. Every previous one was waiting on memory or on the CPU.
 
 The 22 ms of CPU cost per step, which bound Parts 1 and 2, no longer binds
 anything. At batch 256 and p16 a step still takes about 22 ms and produces
-256 tokens instead of one. The cost is still paid. It is paid once per step,
-by a step that now does 256 times the work.
+256 tokens instead of one.
 
 ## Memory ran out first at three prompt lengths, and the prediction said it would not
 
@@ -186,10 +185,10 @@ a prefill forward pass, with shape batch by padded length by 8,960, the
 model's MLP width, in fp16.
 
 That term is `B x L x 8,960 x 2` bytes, and it explains all five failures to
-the byte. At p1024 and B=256, it is 256 x 1024 x 8,960 x 2 = 4.38 GiB, in one
-piece, on top of 8.75 GiB of cache and 2.88 GiB of weights. At p4096 and
-B=64 it is the same 4.38 GiB, because 64 x 4096 equals 256 x 1024. At p4096
-and B=128, and at p1024 B=512, it is 8.75 GiB. The card has 22.06 GiB.
+the byte. At p1024 and B=256 it is 256 x 1024 x 8,960 x 2 = 4.38 GiB, in one
+piece, on top of 8.75 GiB of cache and 2.88 GiB of weights. The other four
+land at 4.38 or 8.75 GiB the same way, since batch times padded length is the
+only thing that moves. The card has 22.06 GiB.
 
 The prediction's memory model had two terms, weights and cache, both of which
 persist for a whole run. Prefill activations are transient. They exist for
@@ -204,27 +203,7 @@ The practical consequence is that the configurations approaching the memory
 traffic limit never reached it. p1024 at B=128 was reading at 289 GB/s and
 p4096 at B=32 at 302 GB/s, the two highest rates measured anywhere in this
 series at 48% and 50% of the card's 600 GB/s, both still scaling at 87% and
-96% of ideal, and both failed to allocate their next batch size. On this
-card, with this engine, the order is: at long prompts the memory allocation
-fails first, at short prompts arithmetic runs out first, and the memory
-traffic limit the prediction named sits behind both.
-
-## Why 24.5% bandwidth utilization did not mean 4x the headroom
-
-Part 2 measured decode moving data at 24.5% of the card's read speed, which
-reads as room for a 4x speedup. The reason it is not: of the 3.1 GB a batch 1
-decode step moves, 3.09 GB is the weights, and the weights are read once per
-step no matter how many sequences ride through it. Only the cache traffic,
-about 10 MB per step at p256, multiplies with B.
-
-So batching does not multiply the traffic that made up that 24.5%. It
-multiplies the one term that was negligible and shares out the term that was
-everything. At p256 and B=256 the step moves the same 3.09 GB of weights plus
-about 1.5 GB of cache. Utilization roughly doubles while aggregate decode
-throughput goes up 200x, from 46.21 to 9,239 tokens per second. Bandwidth
-utilization was the wrong quantity to predict this speedup from. The right
-one, tokens produced per unit of arithmetic, is what the section above used to
-locate where scaling stops.
+96% of ideal, and both failed to allocate their next batch size.
 
 ## Ragged batches: mixed lengths cost more than the padding alone
 
@@ -291,46 +270,17 @@ median wait of over a minute at one request per second are both true, and the
 second number is the one a user of the system would meet. This is the number
 the next engine exists to fix.
 
-## The cost of measuring: a control on the harness itself
-
-Every number in this part was collected by an engine that stops after every
-decode step, twice, to read the clock and to fetch the sampled tokens. That
-is how per token latency is measured at all. Part 1 priced that at 0.23 ms
-per step, 1.2%, at batch 1, and I expected something closer to 50% at large
-batch. The reasoning: at batch 1 the GPU is idle anyway, and once the GPU is
-the busy side, stopping after every step should force the CPU's roughly 22 ms
-of instruction issuing and the GPU's work to happen one after the other
-instead of at the same time, which would roughly double the step.
-
-A control run measured it directly: the same configurations timed as shipped,
-then with both per step stops disabled and a single stop at the end.
-
-| prompt | B | per step time | single stop time | gap |
-|---|---|---|---|---|
-| p256 | 8 | 7.597 s | 7.148 s | +6.3% |
-| p256 | 256 | 11.647 s | 11.106 s | +4.9% |
-| p16 | 512 | 12.102 s | 11.713 s | +3.3% |
-| p16 | 1024 | 23.824 s | 23.334 s | +2.1% |
-
-**The expected large cost is not there.** The gap is 1.8 to 2.1 ms per step
-at every scale, and it shrinks in relative terms as batches grow. My
-reasoning was wrong because the GPU does not wait for a step's 1,123
-instructions to all be issued before starting. It begins executing the first
-ones while the CPU issues the rest, so after a stop, the only lost time is
-the moment where the GPU is done and the next instructions have not yet
-reached it, about 2 ms, not the full 22 ms of issuing. Part 1's 1.2% figure
-was still quoted outside the conditions it was measured under, which is the
-second time this series has caught a control being used that way, but the
-corrected number is 2 to 6% rather than the 50% I feared. Published
-throughputs are therefore 2 to 6% below what the engine does with the
-measurement disabled, and I have left them unadjusted, because the measured
-configuration is the reproducible one.
-
 ## Caveats
 
 The ragged and arrival results are one seeded draw each. A draw without a
 4096 token prompt would pad less and score better. How much better is a
 distribution this part did not sample.
+
+Every number here was measured by an engine that stops after each decode step
+to read the clock and fetch the sampled tokens. A control run with those stops
+disabled is 2 to 6% faster at every batch size tested. The published numbers
+are left unadjusted, because the measured configuration is the reproducible
+one.
 
 ## Bottleneck, and what follows
 
@@ -345,7 +295,7 @@ step instead of once, admit arrivals into slots that free up, and evict rows
 the moment they finish. Paged attention removes the padding: store only real
 tokens, so a ragged mix stops paying for its widest member.
 
-## Prediction, recorded before building continuous batching
+## Prediction
 
 The mixed stream generates 158 tokens per request on average, so 1 request
 per second needs roughly 158 tokens/s of decode, which this part's engine
@@ -381,6 +331,7 @@ uv run modal run modal_app.py::arrivals --engine batched \
     --rates 7,5,3,1 --n-requests 400 --max-batch 32
 uv run modal run scripts/measure_overhead.py::sync_control \
     --configs "p256:8,p256:256,p16:512,p16:1024"
+uv run python scripts/plot_batching.py
 ```
 
 Greedy decoding, seed 0, 256 token budget, 2 warmup and 5 recorded runs per
