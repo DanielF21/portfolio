@@ -73,18 +73,23 @@ export default async function Page() {
             style={revealDelay(1)}
           >
             <li className="flex items-center gap-1.5">
-              <GraduationCap className="size-[1em] shrink-0" aria-hidden />
-              MIT
-            </li>
-            <li className="flex items-center gap-1.5">
-              <Briefcase className="size-[1em] shrink-0" aria-hidden />
-              Engineer
-            </li>
-            <li className="flex items-center gap-1.5">
               <MapPin className="size-[1em] shrink-0" aria-hidden />
               San Francisco, CA
             </li>
           </ul>
+          {/* The blurb. Three claims in the order a stranger needs them:
+              where he trained, what he has published, what he built last. It
+              sits under the fact list rather than replacing it, because the
+              list is scannable and the paragraph is not. */}
+          <p
+            className="reveal mt-6 text-lead text-muted-foreground"
+            style={revealDelay(2)}
+          >
+            I studied computer science at MIT. I&rsquo;ve published astrophysics
+            research to the Harvard-Smithsonian Minor Planet Center. Most
+            recently, I was the second hire at Netic, where I built the agent
+            system that now serves millions of users.
+          </p>
         </header>
 
         {writingCount > 0 && (
@@ -105,13 +110,13 @@ export default async function Page() {
             </div>
 
             {featuredSeries && (
-              <div className="reveal" style={revealDelay(2)}>
+              <div className="reveal" style={revealDelay(3)}>
                 <SeriesCard {...featuredSeries} />
               </div>
             )}
 
             {singles.length > 0 && (
-              <div className="reveal -mx-3 flex flex-col" style={revealDelay(3)}>
+              <div className="reveal -mx-3 flex flex-col" style={revealDelay(4)}>
                 {singles.slice(0, 3).map((doc) => (
                   <Link
                     key={doc.slug}
@@ -150,13 +155,13 @@ export default async function Page() {
           </div>
 
           {featured && (
-            <div className="reveal" style={revealDelay(4)}>
+            <div className="reveal" style={revealDelay(5)}>
               <FeaturedThing thing={featured} />
             </div>
           )}
 
           {rest.length > 0 && (
-            <div className="reveal -mx-3 flex flex-col" style={revealDelay(5)}>
+            <div className="reveal -mx-3 flex flex-col" style={revealDelay(6)}>
               {rest.map((thing) => (
                 <ThingRow key={thing.slug} thing={thing} />
               ))}
