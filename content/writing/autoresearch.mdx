@@ -1,0 +1,141 @@
+---
+title: "Autoresearch Service"
+publishedAt: "2026-09-15"
+hue: "violet"
+description: "I ran up to 64 coding agents in parallel to make open source Python libraries faster, and every increase in parallel compute produced faster code."
+summary: "I ran many coding agents in parallel to see whether more compute produces faster code."
+---
+
+## 1. Introduction
+
+I ran up to 64 coding agents in parallel to make open source Python libraries faster, and every increase in parallel compute produced faster code. This document covers what I built, what I measured, and what I learned.
+
+- I built an autoresearch harness that turns a repository into an optimization problem and searches for faster implementations of one function.
+- More agents per round found faster code at every width with clear diminishing returns past width 16.
+- Coding agents converged in their approach. By the last round of the width 64 run, 63 of the 64 agents submitted the same approach.
+- I tested 2 ways to reduce convergence, in the prompt and in the agent's environment.
+- Against my own build of AlphaEvolve, the harness reached the same speedup 3x faster in wall clock and spent 12x the tokens to do it.
+
+### Why now?
+
+The cost of running language models has dropped rapidly [[1]](https://arxiv.org/abs/2511.07885). As a result, we can now pay for token heavy workloads that were previously too expensive to justify. The question is moving from how to optimize a single model call to how to maximize what many calls can do together.
+
+There is strong evidence that spending more compute on a problem improves the outcome [[2]](http://openai.com/index/navier-stokes-solution). OpenAI's Navier Stokes result spent that compute in parallel: the group that produced it involved on the order of 10,000 agents running at once.
+
+![Accuracy per joule of the best local model and hardware pairs, April 2024 to August 2025](/figures/autoresearch/intelligence-per-watt.png)
+
+*Figure 1: Saad-Falcon et al., "Intelligence per Watt: Measuring Intelligence Efficiency of Local AI," arXiv:2511.07885, 2025. Accuracy per joule for the best models small enough to run on a single workstation or laptop improved 18.0x between April 2024 and August 2025.*
+
+![Pass rate against test time compute on a log scale](/figures/autoresearch/test-time-compute.png)
+
+*Figure 2: OpenAI, [On the Navier Stokes Millennium Prize Problem](http://openai.com/index/navier-stokes-solution). Pass rate rises steadily as test time compute grows on a log scale.*
+
+Although results like this come from frontier research, the same approach may apply to ordinary engineering work. The primary goal of this project was to test that on a CPU bound problem: making popular open source Python libraries faster while maintaining correctness. The end product of each run is a pull request that a maintainer would be willing to merge. This report covers the harness built to do this, which runs up to 64 agents in parallel against [networkx](https://github.com/networkx/networkx), [pyparsing](https://github.com/pyparsing/pyparsing) and [pycodestyle](https://github.com/pycqa/pycodestyle).
+
+## 2. Harness Overview
+
+The harness was inspired from [Meta-Harness](https://arxiv.org/pdf/2603.28052): a search loop built to improve other agent harnesses. In each iteration, a coding agent reads a filesystem holding every earlier candidate: its source code, its score, and the logs from evaluating it. The agent proposes a new candidate, the candidate is evaluated, and the results are written back to the filesystem for the next iteration.
+
+I built on this approach because it was designed to spend tokens. Earlier optimizers compress what the model sees. AlphaEvolve keeps a small window of past programs and their scores, and the Meta-Harness paper estimates that it gives each evaluation 22 thousand tokens of feedback. Meta-Harness keeps all feedback accessible, approximately 10 million tokens per evaluation.
+
+![Best performance against harness evaluations for Meta-Harness and other optimizers](/figures/autoresearch/meta-harness-progress.png)
+
+*Figure 3: Lee et al., "Meta-Harness: End-to-End Optimization of Model Harnesses," arXiv:2603.28052, 2026. On online text classification, Meta-Harness matches the next best optimizer's final accuracy after 4 evaluations and keeps improving past it.*
+
+My harness keeps this idea of a full, shared history, but changes how the search runs. Meta-Harness uses a single agent that proposes a few candidates per iteration. My harness runs many agents in parallel each round, all reading the same history and all scored by the same evaluator.
+
+My harness has three main stages:
+
+1. **Intake** turns a repository into a benchmark the agents can be measured against. A model reads the repository and proposes an operation to time, such as parsing a string. The harness checks the proposal and produces a config: the operation, the inputs to run it on, and a profile of each input.
+
+2. **Optimization** searches for patches in rounds. Each round, many agents read the same history, and each submits one patch from its own copy of the repository. A separate evaluator runs the library's tests on each patch and times it against the original code on new instances of each input. Each attempt is added to the history for the next round: the patch, the agent's trace, and the evaluator's measurement of correctness and speedup on each input.
+
+3. **PR drafting** turns the search into a pull request. A model picks the patch a maintainer is most likely to merge, weighing speedup against lines changed. It writes the description in the style of the repository's recent pull requests and ends with a table of the measurements.
+
+Intake and PR drafting each run once, while optimization repeats for as many rounds as the run allows. The stages fit together as shown below.
+
+![Intake feeds an optimization loop of parallel agents, a shared history and a referee, followed by PR drafting](/figures/autoresearch/harness.png)
+
+*Figure 4: My Proposed Harness*
+
+## 3. Experiments
+
+### 3.1 Parallelism vs Performance
+
+The harness has two settings: width, which is the number of agents working in parallel each round, and the number of rounds. I ran it on the networkx repo at widths 1, 4, 16 and 64, for 16 rounds each, and intake chose [cluster.py lines 161 to 191](https://github.com/networkx/networkx/blob/c94928ed94899033126c9d47f797a1f698584b20/networkx/algorithms/cluster.py#L161-L191) as the target function.
+
+![Best speedup by round and by cumulative tokens for networkx at widths 1, 4, 16 and 64](/figures/autoresearch/width-speedup.png)
+
+*Figure 5: Best speedup found so far, plotted by round (left) and by cumulative tokens (right), for networkx at widths 1, 4, 16 and 64 over 16 rounds.*
+
+These results support the idea from the intro that spending more compute improves the result. With the number of rounds fixed, wider runs generally reached a higher speedup: width 1 ended at 16.4x, widths 4 and 16 at 22.3x and 23.2x, and width 64 at 28.4x. With the width fixed, every run kept improving as rounds went on. Wider runs cost more per gain. Going from width 4 to width 64 uses 16 times the attempts, and the best speedup rises from 22.3x to 28.4x: a relatively marginal gain, but still a gain.
+
+### 3.2 Convergence
+
+The larger width runs beat lower width runs because in each round the larger width runs can take more shots on goal. Because of that they're more likely to get a faster solution. That argument only holds while the shots themselves are different. Every agent reads the same history and sees the same best patch, so their patches move towards each other as the rounds go on. In the first round of the width 64 run, every proposer agent made a unique diff. By the last round, 32 of the 64 diffs were completely identical, and 63 of the 64 diffs were the same approach.
+
+This could be why the width 64 run set no new best in its last 5 rounds. The other explanation is that it had already found the best solution available. If it had, then converging on it is the right outcome. If it had not, the run had no way left to find out. A better solution means a different approach, and by the last round that wasn't happening.
+
+Because of this, I believe a harness should not completely converge early, even if there's something initially promising (similar to SGD where the noise in each step is what keeps the search out of the nearest local minimum).
+
+### 3.3 Breaking Convergence
+
+At a high level, an agent is shaped by two things: (1) its system prompt, and (2) the environment it is placed in, in our case the filesystem holding the repository and every earlier attempt. In the current setup every agent in a round gets the same prompt and the same filesystem. To reduce the rate of convergence, one or both of these things has to change. I ran two more experiments testing one of the changes.
+
+#### Changing the Prompt
+
+The first change gives the agents different jobs. OpenAI used something similar on the Navier Stokes, where they prompted different groups of agents with different variants of the problem statement [[2]](http://openai.com/index/navier-stokes-solution). Here the problem is the same for every agent, so what differs is the kind of change each group is asked for. The agents are split into four equal groups. The first group keeps the original prompt. The second is told to try an approach that departs from the best patch. The third is explicitly told to combine ideas from earlier attempts. The fourth is told to reach the same speedup in a smaller diff. Every agent still reads the whole history, so the only thing that differs is what each group is asked to do with it.
+
+#### Changing the Filesystem
+
+The second change edits what the agents read. My guess is that the best patch is the most useful thing to the agent in history, so most of an agent's attention goes to it. If that is right, removing it should change what the agents do. Half of the agents read a history with the best patch removed, along with every attempt that overlaps it by 50% or more, so they start the round somewhere other than the current best.
+
+Both changes are measured against the original harness. Each of the three runs is width 16 for 8 rounds, and I ran all three on the [pyparsing](https://github.com/pyparsing/pyparsing) and on the [pycodestyle](https://github.com/pycqa/pycodestyle) repos.
+
+#### Results
+
+Neither change beat the control.
+
+| Run | Speedup (pyparsing) | Speedup (pycodestyle) |
+|---|---|---|
+| Control | 37.8x | 4.77x |
+| Reduced History | 35.3x | 3.77x |
+| Prompt Groups | 32.9x | 3.75x |
+
+![Best speedup against cumulative tokens for the control, four prompt groups and reduced history runs on pyparsing and pycodestyle](/figures/autoresearch/convergence-runs.png)
+
+*Figure 6: Three Runs on Each Repository. Best speedup by round for all three runs, width 16 and 8 rounds each.*
+
+The control also used fewer tokens. Both changes cost between 25 and 50% more tokens than the control, and both finished with smaller speedups on each repository.
+
+#### Why the control beat out the two strategies
+
+A record here means an attempt that beat every attempt before it.
+
+In the run with four prompt groups, each group ran 32 attempts. The agents on the original prompt set the most, 16 records on pyparsing and 15 on pycodestyle. The agents told to combine earlier attempts set 8 and 7. The agents told to depart from the best patch set 3 and none, and the agents told to make the patch smaller set absolutely no records on either repository. So half the agents in that run never produced a leading patch.
+
+The reduced history run is the same story. Half the agents could not see the best patch in every round after the first. That half set 3 records on pyparsing and 0 on pycodestyle. The half that saw everything set 15 and 19 records respectively.
+
+Both experiments did what they were meant to do. In the two experiments almost every agent submitted a different patch. The control sat at the other extreme. It resubmitted a patch that had already been measured in 62 of its 128 attempts on pyparsing and in 45 of 128 on pycodestyle. So nearly half the control's agents spent a round redoing work that was already done, and the control still won. Repeats waste money, but they come with every agent working on what is already working, and within the 8 round horizon, it proved to be more optimal than spreading the agent's approaches out.
+
+### 3.4 Harness against AlphaEvolve
+
+![Best speedup by round and by cumulative tokens for the harness and AlphaEvolve](/figures/autoresearch/alphaevolve.png)
+
+**By Token Efficiency:** AlphaEvolve wins by a wide margin. It reached 5.63x for 86 million tokens. The harness spent 545.8 million and ended at 4.77x. AlphaEvolve passed the harness's final number at 44 million tokens, about a twelfth of what the harness spent.
+
+**By Round:** the harness wins. It reached 4.77x in 8 rounds. AlphaEvolve was at 2.07x after 8 rounds, took 32 rounds to pass 4.77x, and finished at 5.63x after 50.
+
+**By improvement per hour:** the harness wins again. The harness reached 4.77x in 6.5 hours. AlphaEvolve needed 15.9 hours to pass that and 21.2 hours to reach 5.63x. The harness spends tokens in parallel, so its extra cost lands on the bill and not on the clock.
+
+AlphaEvolve reached our harness's result on 1/12th of the tokens. The harness got there in about 1/3rd of the wall clock time. That is the tradeoff.
+
+Pick AlphaEvolve if tokens are the scarce thing.
+
+Pick our harness if you have extra compute and need the result sooner.
+
+### 3.5 Reward Hacking
+
+While iterating on this harness I ran into many instances of reward hacking. On the networkx repo, a patch hardcoded the answers inside the graph object and read it back on later calls. Led to a false 6400x speedup. On pycodestyle, a patch did a similar thing as networkx and rebuilt the benchmark files at import time. Led to a false 3470x improvement.
+
+None of this was deliberate cheating. The agents were told to make the number go up, and each of these achieves that goal. Whatever the evaluator measures becomes the real goal, and any difference between what it measures and what you actually want will be exploited, so in harness design it is critical to ensure that they are aligned.

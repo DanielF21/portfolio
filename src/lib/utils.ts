@@ -56,3 +56,11 @@ export function formatDate(date: string) {
     return `${fullDate} (${yearsAgo}y ago)`;
   }
 }
+
+/** "9 min read", from a word count.
+ *
+ *  What a one-off shows where a series shows its part count: both say how much
+ *  there is to read. 230 words a minute, and never less than one. */
+export function readingTime(words: number) {
+  return `${Math.max(1, Math.round(words / 230))} min read`;
+}

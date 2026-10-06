@@ -10,6 +10,8 @@ import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 
+import type { Hue } from "@/data/hues";
+
 /**
  * Markdown loading, parameterised by directory.
  *
@@ -59,6 +61,9 @@ export interface DocMeta {
    *  freshness no edit backs up. */
   updatedAt?: string;
   image?: string;
+  /** A one-off's colour, from the fixed set. A series carries its hue in the
+   *  registry instead, so this is ignored on a part. */
+  hue?: Hue;
   /** Drafts are excluded from every index and from prev/next, but stay
    *  reachable by direct URL so they can be previewed. */
   draft?: boolean;

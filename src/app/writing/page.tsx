@@ -3,12 +3,13 @@ import Link from "next/link";
 
 import { JsonLd } from "@/components/json-ld";
 import { Container } from "@/components/layout/container";
+import { ONE_OFF_HUE } from "@/components/writing/series-card";
 import { blurbText } from "@/data/series";
 import { hueStyle } from "@/data/hues";
 import { allSeries, oneOffs } from "@/data/writing";
 import { breadcrumbSchema, graph } from "@/lib/schema";
 import { pageMetadata } from "@/lib/seo";
-import { formatDate, revealDelay } from "@/lib/utils";
+import { readingTime, revealDelay } from "@/lib/utils";
 
 export const metadata: Metadata = pageMetadata({
   path: "/writing",
@@ -28,8 +29,8 @@ export const metadata: Metadata = pageMetadata({
  * built to present them.
  *
  * So both kinds share a row: a title, a line about it, and one piece of
- * metadata on the right. A series shows its part count and carries its hue as a
- * dot; a one-off shows its date. Nothing else distinguishes them.
+ * metadata on the right. Both carry a hue as a dot. A series shows its part
+ * count and a one-off its reading time. Nothing else distinguishes them.
  *
  * Ordering is by latest activity: a series sorts on its most recent part, a
  * one-off on its own date, and the two interleave.
@@ -77,17 +78,19 @@ export default async function WritingPage() {
               <Link
                 key={href}
                 href={href}
-                style={isSeries ? hueStyle(entry.data.series.hue) : undefined}
+                style={hueStyle(
+                  isSeries
+                    ? entry.data.series.hue
+                    : entry.data.metadata.hue ?? ONE_OFF_HUE
+                )}
                 className="flex flex-col gap-1 rounded-xl px-3 py-4 transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
               >
                 <span className="flex flex-wrap items-baseline justify-between gap-x-4">
                   <span className="font-display text-title font-bold">
-                    {isSeries && (
-                      <span
-                        className="mr-2.5 inline-block size-2.5 rounded-full bg-thing align-middle"
-                        aria-hidden
-                      />
-                    )}
+                    <span
+                      className="mr-2.5 inline-block size-2.5 rounded-full bg-thing align-middle"
+                      aria-hidden
+                    />
                     {isSeries
                       ? entry.data.series.title
                       : entry.data.metadata.title}
@@ -97,7 +100,7 @@ export default async function WritingPage() {
                       ? entry.data.parts.length === 1
                         ? "1 part"
                         : `${entry.data.parts.length} parts`
-                      : formatDate(entry.data.metadata.publishedAt)}
+                      : readingTime(entry.data.wordCount)}
                   </span>
                 </span>
 

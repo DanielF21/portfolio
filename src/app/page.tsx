@@ -5,10 +5,10 @@ import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { Container } from "@/components/layout/container";
 import { LiveBudgetProvider } from "@/components/things/live-budget-provider";
-import { FeaturedThing, ThingRow } from "@/components/things/thing-tile";
-import { SeriesCard } from "@/components/writing/series-card";
+import { ThingRow } from "@/components/things/thing-tile";
+import { ArticleCard, SeriesCard } from "@/components/writing/series-card";
 import { SITE } from "@/data/site";
-import { featuredThing, restOfThings } from "@/data/things";
+import { things } from "@/data/things";
 import { allSeries, oneOffs } from "@/data/writing";
 import { graph, personSchema, websiteSchema } from "@/lib/schema";
 import { pageMetadata } from "@/lib/seo";
@@ -38,8 +38,9 @@ export const metadata: Metadata = {
  */
 
 export default async function Page() {
-  const featured = featuredThing();
-  const rest = restOfThings();
+  // Every thing is a row. The newest one used to get a large tile with a
+  // preview, which outweighed the writing above it.
+  const allThings = things();
   const [series, singles] = await Promise.all([allSeries(), oneOffs()]);
 
   const featuredSeries = series.find((s) => s.parts.length > 0);
@@ -115,26 +116,11 @@ export default async function Page() {
               </div>
             )}
 
-            {singles.length > 0 && (
-              <div className="reveal -mx-3 flex flex-col" style={revealDelay(4)}>
-                {singles.slice(0, 3).map((doc) => (
-                  <Link
-                    key={doc.slug}
-                    href={`/writing/${doc.slug}`}
-                    className="flex flex-col gap-0.5 rounded-xl px-3 py-3 transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none"
-                  >
-                    <span className="font-display text-title font-bold">
-                      {doc.metadata.title}
-                    </span>
-                    {doc.metadata.summary && (
-                      <span className="text-body text-muted-foreground">
-                        {doc.metadata.summary}
-                      </span>
-                    )}
-                  </Link>
-                ))}
+            {singles.slice(0, 3).map((doc) => (
+              <div key={doc.slug} className="reveal" style={revealDelay(4)}>
+                <ArticleCard doc={doc} />
               </div>
-            )}
+            ))}
           </section>
         )}
 
@@ -150,19 +136,13 @@ export default async function Page() {
               href="/things"
               className="font-mono text-meta text-muted-foreground transition-colors hover:text-foreground"
             >
-              all {1 + rest.length} &rarr;
+              all {allThings.length} &rarr;
             </Link>
           </div>
 
-          {featured && (
-            <div className="reveal" style={revealDelay(5)}>
-              <FeaturedThing thing={featured} />
-            </div>
-          )}
-
-          {rest.length > 0 && (
-            <div className="reveal -mx-3 flex flex-col" style={revealDelay(6)}>
-              {rest.map((thing) => (
+          {allThings.length > 0 && (
+            <div className="reveal -mx-3 flex flex-col" style={revealDelay(5)}>
+              {allThings.map((thing) => (
                 <ThingRow key={thing.slug} thing={thing} />
               ))}
             </div>
